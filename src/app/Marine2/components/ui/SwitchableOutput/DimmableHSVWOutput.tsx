@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from "react"
+import React, { useCallback, useMemo, useRef, useState } from "react"
 import {
   getSwitchableOutputNameForDisplay,
   SwitchableOutputId,
@@ -16,6 +16,11 @@ import {
   HSVWColorArray,
   hsvwToArray,
 } from "@victronenergy/mfd-modules/dist/src/utils/hsvw"
+import {
+  colorTemperatureToDisplayColor,
+  colorHueToDisplayColor,
+} from "app/Marine2/utils/helpers/color-conversion-routines"
+import { SWITCHABLE_OUTPUT_TYPE } from "@victronenergy/mfd-modules/dist/src/utils/constants"
 
 interface DimmableHSVWOutputProps {
   key: string
@@ -37,9 +42,12 @@ const DimmableHSVWOutput = observer((props: DimmableHSVWOutputProps) => {
   const outputName = getSwitchableOutputNameForDisplay(switchableOutput, props.parentDeviceName)
 
   const variant = switchableOutput.state === 1 ? "on" : "off"
-  const ligtControlsArray = getValueOrDefault(switchableOutput.lightControls, [0, 0, 0, 0, 0]) as HSVWColorArray
-  const lightControls = arrayToHSVW(ligtControlsArray)
-  const ratio = lightControls.brightness
+  const color = useMemo(
+    () => arrayToHSVW(getValueOrDefault(switchableOutput.lightControls, [0, 0, 0, 0, 0]) as HSVWColorArray),
+    [switchableOutput.lightControls],
+  )
+
+  const ratio = color.brightness
 
   const handleClickOnOff = () => {
     switchableOutput.updateState(switchableOutput.state === 1 ? 0 : 1)
@@ -58,9 +66,9 @@ const DimmableHSVWOutput = observer((props: DimmableHSVWOutputProps) => {
 
   const updateBrightnessValueImmediately = useCallback(
     (percentage: number) => {
-      switchableOutput.updateLightControls(hsvwToArray({ ...lightControls, brightness: createPercentage(percentage) }))
+      switchableOutput.updateLightControls(hsvwToArray({ ...color, brightness: createPercentage(percentage) }))
     },
-    [lightControls, switchableOutput],
+    [color, switchableOutput],
   )
 
   const updateBrightnessValueDebounced = useCallback(
@@ -71,12 +79,10 @@ const DimmableHSVWOutput = observer((props: DimmableHSVWOutputProps) => {
       }
 
       updateTimeoutRef.current = setTimeout(() => {
-        switchableOutput.updateLightControls(
-          hsvwToArray({ ...lightControls, brightness: createPercentage(percentage) }),
-        )
+        switchableOutput.updateLightControls(hsvwToArray({ ...color, brightness: createPercentage(percentage) }))
       }, 10)
     },
-    [lightControls, switchableOutput],
+    [color, switchableOutput],
   )
 
   const handlePress = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
@@ -106,6 +112,8 @@ const DimmableHSVWOutput = observer((props: DimmableHSVWOutputProps) => {
       updateTimeoutRef.current = undefined
     }
   }
+
+  const isInCCTMode = switchableOutput.type === SWITCHABLE_OUTPUT_TYPE.CCT_COLOR_WHEEL
 
   return (
     <div className={classnames("mt-4", props.className)}>
@@ -174,7 +182,9 @@ const DimmableHSVWOutput = observer((props: DimmableHSVWOutputProps) => {
         <div
           className="w-px-44 h-px-44 rounded-md ml-2"
           style={{
-            backgroundColor: hsvToHsl(lightControls.hue, lightControls.saturation, 100),
+            backgroundColor: isInCCTMode
+              ? colorTemperatureToDisplayColor(color.colorTemperature)
+              : colorHueToDisplayColor(color.hue, color.saturation, 100),
           }}
         />
       </div>
@@ -183,13 +193,3 @@ const DimmableHSVWOutput = observer((props: DimmableHSVWOutputProps) => {
 })
 
 export default DimmableHSVWOutput
-
-function hsvToHsl(h: number, s: number, v: number): string {
-  s = s / 100
-  v = v / 100
-
-  const l = v * (1 - s / 2)
-  const sHsl = l === 0 || l === 1 ? 0 : (v - l) / Math.min(l, 1 - l)
-
-  return `hsl(${h}, ${Math.round(sHsl * 100)}%, ${Math.round(l * 100)}%)`
-}
