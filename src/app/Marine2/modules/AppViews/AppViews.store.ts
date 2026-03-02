@@ -11,6 +11,8 @@ export enum AppViews {
   BOX_ENERGY_OVERVIEW = "box/energy-overview",
   BOX_DEVICES_OVERVIEW = "box/devices-overview",
   BOX_ENVIRONMENT_OVERVIEW = "box/environment-overview",
+  CERBO_OVERVIEW = "cerbo-overview",
+  SWITCH_VIEW = "switch-view",
 }
 
 export const AppViewTitleKeys = new Map<AppViews, string>([
@@ -22,6 +24,8 @@ export const AppViewTitleKeys = new Map<AppViews, string>([
   [AppViews.BOX_ENERGY_OVERVIEW, "boxes.energy"],
   [AppViews.BOX_DEVICES_OVERVIEW, "boxes.devices"],
   [AppViews.BOX_ENVIRONMENT_OVERVIEW, "boxes.environment"],
+  [AppViews.CERBO_OVERVIEW, "pages.cerboOverview"],
+  [AppViews.SWITCH_VIEW, "pages.switchView"],
 ])
 
 export class AppViewsStore {

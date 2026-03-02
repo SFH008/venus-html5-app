@@ -205,7 +205,9 @@
         "diagnostics": "Diagnostics",
         "remoteConsole": "Remote Console",
         "switchingPane": "Switching Pane",
-        "systemOverview": "System Overview"
+        "systemOverview": "System Overview",
+        "cerboOverview": "Vessel Dashboard",
+        "switchView": "Vessel Dashboard"
     },
     "remoteLogin": {
         "2fa": "Two-factor authentication token",

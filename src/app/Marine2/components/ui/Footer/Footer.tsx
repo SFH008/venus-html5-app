@@ -28,14 +28,26 @@ const Footer = ({ pageSelectorProps }: Props) => {
           </div>
         )}
         {isShowingBackButton && (
-          <>
-            <div onClick={handleBackClick} className={"w-px-44 h-px-44 justify-center p-1 cursor-pointer"}>
-              <BackIcon onClick={handleBackClick} className={"text-content-victronBlue"} alt={"Back"} />
-            </div>
-          </>
+          <div onClick={handleBackClick} className={"w-px-44 h-px-44 justify-center p-1 cursor-pointer"}>
+            <BackIcon onClick={handleBackClick} className={"text-content-victronBlue"} alt={"Back"} />
+          </div>
         )}
       </div>
       <SwitchingPane />
+      <div className="flex flex-row gap-1">
+        <div
+          onClick={() => appViewsStore.setView(AppViews.CERBO_OVERVIEW)}
+          className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
+        >
+          ⚡
+        </div>
+        <div
+          onClick={() => appViewsStore.setView(AppViews.SWITCH_VIEW)}
+          className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
+        >
+          🔌
+        </div>
+      </div>
       <SettingsMenu />
     </div>
   )

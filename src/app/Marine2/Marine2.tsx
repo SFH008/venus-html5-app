@@ -12,6 +12,8 @@ import Connecting from "./components/ui/Connecting"
 import DiagnosticsView from "./components/views/DiagnosticsView"
 import MqttUnavailable from "./components/ui/MqttUnavailable"
 import ErrorFallback from "./components/ui/Error"
+import CerboView from "./components/views/CerboView"
+import SwitchView from "./components/views/SwitchView"
 
 export const Marine2 = observer((props: AppProps) => {
   // init App
@@ -45,6 +47,10 @@ export const Marine2 = observer((props: AppProps) => {
         return <RemoteConsoleView host={host} />
       case AppViews.DIAGNOSTICS:
         return <DiagnosticsView />
+      case AppViews.CERBO_OVERVIEW:
+        return <CerboView />
+      case AppViews.SWITCH_VIEW:
+        return <SwitchView />
       default:
         return <RootView />
     }
