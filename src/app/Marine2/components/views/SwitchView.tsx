@@ -1,4 +1,4 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import MainLayout from "../ui/MainLayout"
 import { observer } from "mobx-react-lite"
 
@@ -50,11 +50,33 @@ const SwitchCard = ({ title, subtitle, isOn, power, onToggle, disabled }: Switch
   )
 }
 
+const NUC_URL = "http://192.168.76.171:3000/plugins/signalk-node-red/redApi"
+const TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6InNpZ25hbGsiLCJpYXQiOjE3NzIzMTU3NTN9.R33MocWkdadkP8cslKuBw6CFzvUnaZP3daYxY56wCeY"
+
 const SwitchView = () => {
   const [shellyOn, setShellyOn] = useState(false)
   const [shellyOnline] = useState(false)
   const [virtualOn, setVirtualOn] = useState(false)
-  const [virtualPower] = useState(1200)
+  const [virtualPower, setVirtualPower] = useState(1200)
+
+  useEffect(() => {
+    const fetchState = async () => {
+      try {
+        const response = await fetch(`${NUC_URL}/virtual-switch`, {
+          headers: { Authorization: `Bearer ${TOKEN}` },
+        })
+        const data = await response.json()
+        setVirtualOn(data.state)
+        setVirtualPower(data.power)
+      } catch (e) {
+        console.error("Failed to fetch virtual switch state:", e)
+      }
+    }
+    fetchState()
+    const interval = setInterval(fetchState, 5000)
+    return () => clearInterval(interval)
+  }, [])
 
   const toggleShelly = () => {
     if (shellyOnline) {
@@ -62,8 +84,23 @@ const SwitchView = () => {
     }
   }
 
-  const toggleVirtual = () => {
-    setVirtualOn((prev) => !prev)
+  const toggleVirtual = async () => {
+    const newState = !virtualOn
+    try {
+      const response = await fetch(`${NUC_URL}/virtual-switch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${TOKEN}`,
+        },
+        body: JSON.stringify({ state: newState, power: 1200 }),
+      })
+      const data = await response.json()
+      setVirtualOn(data.state)
+      setVirtualPower(data.power)
+    } catch (e) {
+      console.error("Virtual switch error:", e)
+    }
   }
 
   return (
