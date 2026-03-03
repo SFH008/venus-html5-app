@@ -36,6 +36,12 @@ const Footer = ({ pageSelectorProps }: Props) => {
       <SwitchingPane />
       <div className="flex flex-row gap-1">
         <div
+          onClick={() => appViewsStore.setView(AppViews.BOAT_OVERVIEW)}
+          className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
+        >
+          🛥
+        </div>
+        <div
           onClick={() => appViewsStore.setView(AppViews.CERBO_OVERVIEW)}
           className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
         >

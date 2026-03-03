@@ -5,6 +5,7 @@ import { mfdLanguageOptions } from "app/locales/constants"
 import { observer } from "mobx-react"
 import { isError } from "app/utils/util"
 import { AppViews, useAppViewsStore } from "./modules/AppViews"
+import SplashScreen from "./components/views/SplashScreen"
 import BoxView from "./components/views/BoxView"
 import RootView from "./components/views/RootView"
 import RemoteConsoleView from "./components/views/RemoteConsoleView"
@@ -14,6 +15,7 @@ import MqttUnavailable from "./components/ui/MqttUnavailable"
 import ErrorFallback from "./components/ui/Error"
 import CerboView from "./components/views/CerboView"
 import SwitchView from "./components/views/SwitchView"
+import BoatOverviewView from "./components/views/BoatOverviewView"
 
 export const Marine2 = observer((props: AppProps) => {
   // init App
@@ -29,6 +31,7 @@ export const Marine2 = observer((props: AppProps) => {
   const { error, status } = mqtt
 
   const appViewsStore = useAppViewsStore()
+  const [showSplash, setShowSplash] = useState(true)
   const [currentView, setCurrentView] = useState(appViewsStore.currentView)
 
   useEffect(() => {
@@ -43,6 +46,8 @@ export const Marine2 = observer((props: AppProps) => {
 
     // Other views
     switch (currentView) {
+      case AppViews.BOAT_OVERVIEW:
+        return <BoatOverviewView />
       case AppViews.REMOTE_CONSOLE:
         return <RemoteConsoleView host={host} />
       case AppViews.DIAGNOSTICS:
@@ -68,5 +73,12 @@ export const Marine2 = observer((props: AppProps) => {
     return <Connecting />
   }
 
-  return renderView()
+  return (
+    <>
+      {showSplash && (
+        <SplashScreen vesselName="Dance Of The Spirits" duration={4500} onComplete={() => setShowSplash(false)} />
+      )}
+      {renderView()}
+    </>
+  )
 })
