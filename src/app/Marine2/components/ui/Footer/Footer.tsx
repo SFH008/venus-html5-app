@@ -6,20 +6,30 @@ import BackIcon from "../../../images/icons/back.svg"
 import { AppViews, useAppViewsStore } from "../../../modules/AppViews"
 import SwitchingPane from "../../views/SwitchingPane"
 
+// ── Nav items — add/remove/reorder here freely ─────────────────────────────
+const NAV_ITEMS: { view: AppViews; icon: string; label: string }[] = [
+  { view: AppViews.ROOT, icon: "🏠", label: "Home" },
+  { view: AppViews.BOAT_OVERVIEW, icon: "🛥", label: "Vessel" },
+  { view: AppViews.SWITCH_VIEW, icon: "🔌", label: "Switching" },
+  { view: AppViews.CERBO_OVERVIEW, icon: "⚡", label: "Cerbo" },
+  { view: AppViews.BOX_ENERGY_OVERVIEW, icon: "🔋", label: "Energy" },
+  { view: AppViews.BOX_TANKS, icon: "💧", label: "Tanks" },
+]
+
 const Footer = ({ pageSelectorProps }: Props) => {
   const appViewsStore = useAppViewsStore()
-  const [isShowingBackButton, setIsShowingBackButton] = useState(appViewsStore.currentView !== AppViews.ROOT)
-
-  const handleBackClick = () => {
-    appViewsStore.setView(AppViews.ROOT)
-  }
+  const current = appViewsStore.currentView
+  const [isShowingBackButton, setIsShowingBackButton] = useState(current !== AppViews.ROOT)
 
   useEffect(() => {
     setIsShowingBackButton(appViewsStore.currentView !== AppViews.ROOT)
   }, [appViewsStore.currentView])
 
+  const handleBackClick = () => appViewsStore.setView(AppViews.ROOT)
+
   return (
     <div className="flex flex-row w-full h-px-44 m-1 items-center justify-between pt-2 pb-3">
+      {/* Left — version + optional back */}
       <div className="flex flex-1 flex-row items-center justify-between">
         <VersionInfo />
         {!!pageSelectorProps && !!pageSelectorProps.maxPages && pageSelectorProps.maxPages > 1 && (
@@ -33,27 +43,82 @@ const Footer = ({ pageSelectorProps }: Props) => {
           </div>
         )}
       </div>
+
+      {/* Centre — SwitchingPane (keep existing) */}
       <SwitchingPane />
-      <div className="flex flex-row gap-1">
-        <div
-          onClick={() => appViewsStore.setView(AppViews.BOAT_OVERVIEW)}
-          className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
-        >
-          🛥
-        </div>
-        <div
-          onClick={() => appViewsStore.setView(AppViews.CERBO_OVERVIEW)}
-          className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
-        >
-          ⚡
-        </div>
-        <div
-          onClick={() => appViewsStore.setView(AppViews.SWITCH_VIEW)}
-          className="w-px-44 h-px-44 flex justify-center items-center p-1 cursor-pointer text-content-victronBlue text-2xl"
-        >
-          🔌
-        </div>
+
+      {/* Right — smart nav bar */}
+      <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 2 }}>
+        {NAV_ITEMS.map(({ view, icon, label }) => {
+          const isActive = current === view
+          return (
+            <div
+              key={view}
+              onClick={() => appViewsStore.setView(view)}
+              title={label}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 44,
+                height: 44,
+                cursor: "pointer",
+                borderRadius: 6,
+                padding: "2px 4px",
+                position: "relative",
+                background: isActive ? "rgba(0, 177, 255, 0.12)" : "transparent",
+                border: isActive ? "1px solid rgba(0, 177, 255, 0.35)" : "1px solid transparent",
+                transition: "all 0.15s ease",
+              }}
+            >
+              {/* Active indicator bar */}
+              {isActive && (
+                <div
+                  style={{
+                    position: "absolute",
+                    bottom: 2,
+                    left: "20%",
+                    right: "20%",
+                    height: 2,
+                    borderRadius: 1,
+                    background: "#00b1ff",
+                    boxShadow: "0 0 6px #00b1ff",
+                  }}
+                />
+              )}
+              {/* Icon */}
+              <span
+                style={{
+                  fontSize: 18,
+                  lineHeight: 1,
+                  filter: isActive ? "none" : "grayscale(0.3) opacity(0.6)",
+                  transition: "filter 0.15s ease",
+                }}
+              >
+                {icon}
+              </span>
+              {/* Label */}
+              <span
+                style={{
+                  fontSize: 7,
+                  marginTop: 1,
+                  letterSpacing: "0.05em",
+                  textTransform: "uppercase",
+                  color: isActive ? "#00b1ff" : "rgba(150,170,200,0.5)",
+                  fontFamily: "monospace",
+                  whiteSpace: "nowrap",
+                  transition: "color 0.15s ease",
+                }}
+              >
+                {label}
+              </span>
+            </div>
+          )
+        })}
       </div>
+
+      {/* Far right — settings */}
       <SettingsMenu />
     </div>
   )

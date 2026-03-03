@@ -14,8 +14,9 @@ import DiagnosticsView from "./components/views/DiagnosticsView"
 import MqttUnavailable from "./components/ui/MqttUnavailable"
 import ErrorFallback from "./components/ui/Error"
 import CerboView from "./components/views/CerboView"
-import SwitchView from "./components/views/SwitchView"
 import BoatOverviewView from "./components/views/BoatOverviewView"
+import DigitalSwitchingView from "./components/views/DigitalSwitchingView"
+import MainLayout from "./components/ui/MainLayout"
 
 export const Marine2 = observer((props: AppProps) => {
   // init App
@@ -47,15 +48,23 @@ export const Marine2 = observer((props: AppProps) => {
     // Other views
     switch (currentView) {
       case AppViews.BOAT_OVERVIEW:
-        return <BoatOverviewView />
+        return (
+          <MainLayout>
+            <BoatOverviewView />
+          </MainLayout>
+        )
+      case AppViews.SWITCH_VIEW:
+        return (
+          <MainLayout>
+            <DigitalSwitchingView />
+          </MainLayout>
+        )
       case AppViews.REMOTE_CONSOLE:
         return <RemoteConsoleView host={host} />
       case AppViews.DIAGNOSTICS:
         return <DiagnosticsView />
       case AppViews.CERBO_OVERVIEW:
         return <CerboView />
-      case AppViews.SWITCH_VIEW:
-        return <SwitchView />
       default:
         return <RootView />
     }
