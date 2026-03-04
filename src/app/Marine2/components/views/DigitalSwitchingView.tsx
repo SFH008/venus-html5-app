@@ -365,10 +365,10 @@ const TogglePopup = ({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: 11, color: sysCfg.color, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+            <div style={{ fontSize: 14, color: sysCfg.color, letterSpacing: "0.2em", textTransform: "uppercase" }}>
               {sw.icon} {sw.label}
             </div>
-            <div style={{ fontSize: 8.5, color: "rgba(0,210,255,0.38)", marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: "rgba(0,210,255,0.38)", marginTop: 3 }}>
               {sw.zone} · {sysCfg.label}
             </div>
           </div>
@@ -399,11 +399,11 @@ const TogglePopup = ({
             }}
           />
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: stColor, letterSpacing: "0.05em" }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: stColor, letterSpacing: "0.05em" }}>
               {state.toUpperCase()}
             </div>
             {amps !== null && (
-              <div style={{ fontSize: 9, color: "rgba(0,210,255,0.45)", marginTop: 1 }}>{amps.toFixed(1)} A</div>
+              <div style={{ fontSize: 12, color: "rgba(0,210,255,0.45)", marginTop: 1 }}>{amps.toFixed(1)} A</div>
             )}
           </div>
         </div>
@@ -418,7 +418,7 @@ const TogglePopup = ({
               ? "linear-gradient(135deg,rgba(40,0,0,0.8),rgba(60,0,0,0.8))"
               : "linear-gradient(135deg,rgba(0,40,20,0.8),rgba(0,60,30,0.8))",
             color: isOn ? "#ff8080" : "#00ff9d",
-            fontSize: 12,
+            fontSize: 16,
             fontWeight: 700,
             letterSpacing: "0.2em",
             textTransform: "uppercase",
@@ -431,7 +431,7 @@ const TogglePopup = ({
         <div
           style={{
             marginTop: 14,
-            fontSize: 7.5,
+            fontSize: 11,
             color: "rgba(0,210,255,0.28)",
             wordBreak: "break-all",
             lineHeight: 1.6,
@@ -510,14 +510,14 @@ const SwitchPin = ({
           padding: "3px 7px",
           backdropFilter: "blur(10px)",
           textAlign: "center",
-          minWidth: 62,
+          minWidth: 80,
           boxShadow: isOn ? `0 0 12px ${stColor}30,0 2px 8px rgba(0,0,0,0.7)` : "0 1px 6px rgba(0,0,0,0.65)",
           transition: "all 0.25s",
         }}
       >
         <div
           style={{
-            fontSize: 7.5,
+            fontSize: 13,
             color: sysCfg.color,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
@@ -530,7 +530,7 @@ const SwitchPin = ({
         </div>
         <div
           style={{
-            fontSize: 10,
+            fontSize: 16,
             fontWeight: 700,
             color: stColor,
             fontFamily: "'Share Tech Mono',monospace",
@@ -540,7 +540,7 @@ const SwitchPin = ({
           {state === "unknown" ? "—" : state.toUpperCase()}
         </div>
         {amps !== null && isOn && (
-          <div style={{ fontSize: 8, color: "rgba(0,210,255,0.5)", marginTop: 1 }}>{amps.toFixed(1)}A</div>
+          <div style={{ fontSize: 12, color: "rgba(0,210,255,0.5)", marginTop: 1 }}>{amps.toFixed(1)}A</div>
         )}
       </div>
     </div>
@@ -634,7 +634,7 @@ const DigitalSwitchingView = () => {
           <div>
             <div
               style={{
-                fontSize: 8.5,
+                fontSize: 12,
                 color: "rgba(0,210,255,0.42)",
                 letterSpacing: "0.35em",
                 textTransform: "uppercase",
@@ -644,7 +644,7 @@ const DigitalSwitchingView = () => {
             </div>
             <div
               style={{
-                fontSize: 14,
+                fontSize: 18,
                 fontFamily: "'Cinzel',serif",
                 color: "#daf2ff",
                 letterSpacing: "0.12em",
@@ -656,7 +656,7 @@ const DigitalSwitchingView = () => {
           </div>
           <div
             style={{
-              fontSize: 9,
+              fontSize: 13,
               color: "#00ff9d",
               letterSpacing: "0.2em",
               border: "1px solid rgba(0,255,157,0.3)",
@@ -672,7 +672,7 @@ const DigitalSwitchingView = () => {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              fontSize: 7.5,
+              fontSize: 12,
               color: "rgba(200,230,255,0.42)",
               letterSpacing: "0.2em",
             }}
@@ -714,7 +714,7 @@ const DigitalSwitchingView = () => {
                 key={sys}
                 onClick={() => setFilter(sys)}
                 style={{
-                  fontSize: 7.5,
+                  fontSize: 12,
                   letterSpacing: "0.18em",
                   textTransform: "uppercase",
                   cursor: "pointer",
@@ -778,7 +778,7 @@ const DigitalSwitchingView = () => {
                   display: "flex",
                   alignItems: "center",
                   gap: 5,
-                  fontSize: 7.5,
+                  fontSize: 12,
                   color: "rgba(200,230,255,0.35)",
                   letterSpacing: "0.15em",
                   textTransform: "uppercase",
@@ -797,7 +797,7 @@ const DigitalSwitchingView = () => {
               </div>
             ),
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 7.5, letterSpacing: "0.12em" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, letterSpacing: "0.12em" }}>
             <span style={{ color: "#00ff9d" }}>● ON</span>
             <span style={{ color: "rgba(80,80,80,0.9)" }}>● OFF</span>
             <span style={{ color: "#ff4040" }}>● FAULT</span>

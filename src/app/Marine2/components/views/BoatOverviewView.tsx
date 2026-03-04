@@ -363,14 +363,14 @@ const SensorPin = ({
           padding: "3px 7px",
           backdropFilter: "blur(10px)",
           textAlign: "center",
-          minWidth: 60,
+          minWidth: 80,
           boxShadow: selected ? `0 0 14px ${color}35, 0 2px 10px rgba(0,0,0,0.75)` : "0 1px 6px rgba(0,0,0,0.65)",
           transition: "all 0.2s",
         }}
       >
         <div
           style={{
-            fontSize: 7.5,
+            fontSize: 13,
             color: "rgba(0,210,255,0.48)",
             letterSpacing: "0.14em",
             textTransform: "uppercase",
@@ -382,7 +382,7 @@ const SensorPin = ({
         </div>
         <div
           style={{
-            fontSize: 11,
+            fontSize: 16,
             fontWeight: 700,
             color,
             fontFamily: "'Share Tech Mono', monospace",
@@ -430,10 +430,10 @@ const DetailPanel = ({
     >
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
         <div>
-          <div style={{ fontSize: 10, color, letterSpacing: "0.18em", textTransform: "uppercase" }}>
+          <div style={{ fontSize: 13, color, letterSpacing: "0.18em", textTransform: "uppercase" }}>
             {cfg.icon} {sensor.label}
           </div>
-          <div style={{ fontSize: 8.5, color: "rgba(0,210,255,0.38)", marginTop: 2 }}>{sensor.zone}</div>
+          <div style={{ fontSize: 12, color: "rgba(0,210,255,0.38)", marginTop: 2 }}>{sensor.zone}</div>
         </div>
         <div onClick={onClose} style={{ cursor: "pointer", color: "rgba(0,210,255,0.4)", fontSize: 14 }}>
           ✕
@@ -450,22 +450,22 @@ const DetailPanel = ({
           border: `1px solid ${color}18`,
         }}
       >
-        <div style={{ fontSize: 8, color: "rgba(0,210,255,0.38)", letterSpacing: "0.18em", marginBottom: 3 }}>
+        <div style={{ fontSize: 12, color: "rgba(0,210,255,0.38)", letterSpacing: "0.18em", marginBottom: 3 }}>
           CURRENT VALUE
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color }}>{text}</div>
+        <div style={{ fontSize: 26, fontWeight: 700, color }}>{text}</div>
         {sensor.type === "temperature" && typeof value === "number" && (
-          <div style={{ fontSize: 8, color: "rgba(0,210,255,0.32)", marginTop: 2 }}>Raw: {value.toFixed(2)} K</div>
+          <div style={{ fontSize: 12, color: "rgba(0,210,255,0.32)", marginTop: 2 }}>Raw: {value.toFixed(2)} K</div>
         )}
       </div>
 
       {/* Path */}
-      <div style={{ fontSize: 8, color: "rgba(0,210,255,0.32)", letterSpacing: "0.12em", marginBottom: 3 }}>
+      <div style={{ fontSize: 12, color: "rgba(0,210,255,0.32)", letterSpacing: "0.12em", marginBottom: 3 }}>
         SIGNALK PATH
       </div>
       <div
         style={{
-          fontSize: 7.5,
+          fontSize: 11,
           color: "rgba(0,210,255,0.52)",
           wordBreak: "break-all",
           lineHeight: 1.65,
@@ -577,7 +577,7 @@ const BoatOverviewView = () => {
           <div>
             <div
               style={{
-                fontSize: 8.5,
+                fontSize: 12,
                 color: "rgba(0,210,255,0.42)",
                 letterSpacing: "0.35em",
                 textTransform: "uppercase",
@@ -587,7 +587,7 @@ const BoatOverviewView = () => {
             </div>
             <div
               style={{
-                fontSize: 14,
+                fontSize: 18,
                 fontFamily: "'Cinzel', serif",
                 color: "#daf2ff",
                 letterSpacing: "0.12em",
@@ -602,7 +602,7 @@ const BoatOverviewView = () => {
             <div
               onClick={() => setShowPins((v) => !v)}
               style={{
-                fontSize: 7.5,
+                fontSize: 12,
                 letterSpacing: "0.2em",
                 textTransform: "uppercase",
                 cursor: "pointer",
@@ -620,7 +620,7 @@ const BoatOverviewView = () => {
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                fontSize: 7.5,
+                fontSize: 12,
                 color: "rgba(200,230,255,0.42)",
                 letterSpacing: "0.2em",
               }}
@@ -684,7 +684,7 @@ const BoatOverviewView = () => {
                 display: "flex",
                 alignItems: "center",
                 gap: 5,
-                fontSize: 7.5,
+                fontSize: 12,
                 color: "rgba(200,230,255,0.35)",
                 letterSpacing: "0.15em",
                 textTransform: "uppercase",

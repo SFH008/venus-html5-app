@@ -16,6 +16,7 @@ import ErrorFallback from "./components/ui/Error"
 import CerboView from "./components/views/CerboView"
 import BoatOverviewView from "./components/views/BoatOverviewView"
 import DigitalSwitchingView from "./components/views/DigitalSwitchingView"
+import WatermakerView from "./components/views/WatermakerView"
 import MainLayout from "./components/ui/MainLayout"
 
 export const Marine2 = observer((props: AppProps) => {
@@ -57,6 +58,12 @@ export const Marine2 = observer((props: AppProps) => {
         return (
           <MainLayout>
             <DigitalSwitchingView />
+          </MainLayout>
+        )
+      case AppViews.WATERMAKER_VIEW:
+        return (
+          <MainLayout>
+            <WatermakerView />
           </MainLayout>
         )
       case AppViews.REMOTE_CONSOLE:

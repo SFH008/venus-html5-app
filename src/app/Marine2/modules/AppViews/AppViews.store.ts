@@ -14,6 +14,7 @@ export enum AppViews {
   CERBO_OVERVIEW = "cerbo-overview",
   SWITCH_VIEW = "switch-view",
   BOAT_OVERVIEW = "boat-overview",
+  WATERMAKER_VIEW = "watermaker-view",
 }
 
 export const AppViewTitleKeys = new Map<AppViews, string>([
@@ -28,6 +29,7 @@ export const AppViewTitleKeys = new Map<AppViews, string>([
   [AppViews.CERBO_OVERVIEW, "pages.cerboOverview"],
   [AppViews.SWITCH_VIEW, "pages.switchView"],
   [AppViews.BOAT_OVERVIEW, "pages.boatOverview"],
+  [AppViews.WATERMAKER_VIEW, "pages.watermakerView"],
 ])
 
 export class AppViewsStore {

@@ -1,7 +1,5 @@
 import { useEffect, useState, useRef } from "react"
-
-// Base64 vessel image - replace with your actual asset import in production:
-import vesselImg from "../../../images/vessel.jpg"
+import vesselImg from "../../images/vessel.png"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SplashScreenProps {
@@ -161,9 +159,9 @@ const SplashScreen = ({ onComplete, duration = 4500, vesselName = "Dance Of The 
           to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes particleFloat {
-          0%   { transform: translateY(0px)   scale(1);    opacity: 0.7; }
-          50%  { transform: translateY(-18px) scale(1.15); opacity: 1;   }
-          100% { transform: translateY(0px)   scale(1);    opacity: 0.7; }
+          0%   { transform: translateY(0px);   opacity: 0.4; }
+          50%  { transform: translateY(-8px);  opacity: 0.7; }
+          100% { transform: translateY(0px);   opacity: 0.4; }
         }
         @keyframes vesselGlow {
           0%,100% { filter: brightness(1)   drop-shadow(0 0 18px rgba(0,210,255,0.45)); }
@@ -222,7 +220,7 @@ const SplashScreen = ({ onComplete, duration = 4500, vesselName = "Dance Of The 
               background: "rgba(0,210,255,0.6)",
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 70}%`,
-              animation: `particleFloat ${3 + Math.random() * 4}s ease-in-out ${Math.random() * 3}s infinite`,
+              animation: `particleFloat ${8 + Math.random() * 6}s ease-in-out ${Math.random() * 8}s infinite`,
             }}
           />
         ))}
@@ -269,18 +267,17 @@ const SplashScreen = ({ onComplete, duration = 4500, vesselName = "Dance Of The 
           className={phase === "enter" ? "splash-enter" : ""}
           style={{
             marginBottom: 8,
-            animation: "vesselGlow 3s ease-in-out infinite",
-            animationDelay: "1s",
           }}
         >
           <img
             src={vesselImg}
             alt="Vessel"
             style={{
-              width: 320,
+              width: 640,
               height: "auto",
-              borderRadius: 4,
               display: "block",
+              mixBlendMode: "screen",
+              opacity: 0.92,
             }}
           />
         </div>
@@ -351,7 +348,7 @@ const SplashScreen = ({ onComplete, duration = 4500, vesselName = "Dance Of The 
                   borderRadius: "50%",
                   background: color,
                   boxShadow: `0 0 8px ${color}`,
-                  animation: "particleFloat 2s ease-in-out infinite",
+                  animation: "particleFloat 6s ease-in-out infinite",
                   animationDelay: `${Math.random()}s`,
                 }}
               />

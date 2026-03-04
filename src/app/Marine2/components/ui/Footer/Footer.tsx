@@ -14,6 +14,7 @@ const NAV_ITEMS: { view: AppViews; icon: string; label: string }[] = [
   { view: AppViews.CERBO_OVERVIEW, icon: "⚡", label: "Cerbo" },
   { view: AppViews.BOX_ENERGY_OVERVIEW, icon: "🔋", label: "Energy" },
   { view: AppViews.BOX_TANKS, icon: "💧", label: "Tanks" },
+  { view: AppViews.WATERMAKER_VIEW, icon: "🌊", label: "Water" },
 ]
 
 const Footer = ({ pageSelectorProps }: Props) => {
@@ -61,7 +62,7 @@ const Footer = ({ pageSelectorProps }: Props) => {
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                width: 44,
+                width: 54,
                 height: 44,
                 cursor: "pointer",
                 borderRadius: 6,
@@ -90,7 +91,7 @@ const Footer = ({ pageSelectorProps }: Props) => {
               {/* Icon */}
               <span
                 style={{
-                  fontSize: 18,
+                  fontSize: 22,
                   lineHeight: 1,
                   filter: isActive ? "none" : "grayscale(0.3) opacity(0.6)",
                   transition: "filter 0.15s ease",
@@ -101,8 +102,8 @@ const Footer = ({ pageSelectorProps }: Props) => {
               {/* Label */}
               <span
                 style={{
-                  fontSize: 7,
-                  marginTop: 1,
+                  fontSize: 9,
+                  marginTop: 2,
                   letterSpacing: "0.05em",
                   textTransform: "uppercase",
                   color: isActive ? "#00b1ff" : "rgba(150,170,200,0.5)",

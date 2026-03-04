@@ -207,7 +207,9 @@
         "switchingPane": "Switching Pane",
         "systemOverview": "System Overview",
         "cerboOverview": "Vessel Dashboard",
-        "switchView": "Vessel Dashboard"
+        "switchView": "Vessel Dashboard",
+        "watermakerView": "Watermaker",
+        "boatOverview": "Boat Overview"
     },
     "remoteLogin": {
         "2fa": "Two-factor authentication token",
