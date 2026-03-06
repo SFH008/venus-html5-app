@@ -204,8 +204,10 @@
     "pages": {
         "diagnostics": "Diagnostics",
         "remoteConsole": "Remote Console",
-        "switchingPane": "Switching Pane",
         "systemOverview": "System Overview",
+        "switchingPane": "Switching Pane",
+        "weatherView": "Weather",
+        "weatherForecast": "Forecast",
         "cerboOverview": "Vessel Dashboard",
         "switchView": "Vessel Dashboard",
         "watermakerView": "Watermaker",

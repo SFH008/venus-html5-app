@@ -15,6 +15,9 @@ export enum AppViews {
   SWITCH_VIEW = "switch-view",
   BOAT_OVERVIEW = "boat-overview",
   WATERMAKER_VIEW = "watermaker-view",
+  SYSTEM_OVERVIEW = "system-overview",
+  WEATHER_VIEW = "weather-view",
+  WEATHER_FORECAST = "weather-forecast",
 }
 
 export const AppViewTitleKeys = new Map<AppViews, string>([
@@ -30,6 +33,9 @@ export const AppViewTitleKeys = new Map<AppViews, string>([
   [AppViews.SWITCH_VIEW, "pages.switchView"],
   [AppViews.BOAT_OVERVIEW, "pages.boatOverview"],
   [AppViews.WATERMAKER_VIEW, "pages.watermakerView"],
+  [AppViews.SYSTEM_OVERVIEW, "pages.systemOverview"],
+  [AppViews.WEATHER_VIEW, "pages.weatherView"],
+  [AppViews.WEATHER_FORECAST, "pages.weatherForecast"],
 ])
 
 export class AppViewsStore {

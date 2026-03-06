@@ -17,7 +17,10 @@ import CerboView from "./components/views/CerboView"
 import BoatOverviewView from "./components/views/BoatOverviewView"
 import DigitalSwitchingView from "./components/views/DigitalSwitchingView"
 import WatermakerView from "./components/views/WatermakerView"
+import SystemOverviewView from "./components/views/SystemOverviewView"
 import MainLayout from "./components/ui/MainLayout"
+import WeatherView from "./components/views/WeatherView"
+import WeatherForecastView from "./components/views/WeatherForecastView"
 
 export const Marine2 = observer((props: AppProps) => {
   // init App
@@ -48,6 +51,12 @@ export const Marine2 = observer((props: AppProps) => {
 
     // Other views
     switch (currentView) {
+      case AppViews.SYSTEM_OVERVIEW:
+        return (
+          <MainLayout>
+            <SystemOverviewView />
+          </MainLayout>
+        )
       case AppViews.BOAT_OVERVIEW:
         return (
           <MainLayout>
@@ -58,6 +67,18 @@ export const Marine2 = observer((props: AppProps) => {
         return (
           <MainLayout>
             <DigitalSwitchingView />
+          </MainLayout>
+        )
+      case AppViews.WEATHER_VIEW:
+        return (
+          <MainLayout>
+            <WeatherView />
+          </MainLayout>
+        )
+      case AppViews.WEATHER_FORECAST:
+        return (
+          <MainLayout>
+            <WeatherForecastView />
           </MainLayout>
         )
       case AppViews.WATERMAKER_VIEW:
