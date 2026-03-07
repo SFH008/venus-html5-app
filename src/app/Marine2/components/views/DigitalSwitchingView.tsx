@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback } from "react"
 import boatLayout from "../../../images/jeanneau53.png"
 
-const SIGNALK_HOST = "192.168.76.171"
-const SIGNALK_PORT = 3000
+import { getConfig } from "../../config/AppConfig"
+const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 
 type SwitchSystem = "venus" | "shelly" | "nodered" | "yarrboard"
 type SwitchState = "on" | "off" | "fault" | "unknown"

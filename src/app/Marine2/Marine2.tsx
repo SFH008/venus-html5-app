@@ -21,6 +21,7 @@ import SystemOverviewView from "./components/views/SystemOverviewView"
 import MainLayout from "./components/ui/MainLayout"
 import WeatherView from "./components/views/WeatherView"
 import WeatherForecastView from "./components/views/WeatherForecastView"
+import SettingsView from "./components/views/SettingsView"
 
 export const Marine2 = observer((props: AppProps) => {
   // init App
@@ -85,6 +86,12 @@ export const Marine2 = observer((props: AppProps) => {
         return (
           <MainLayout>
             <WatermakerView />
+          </MainLayout>
+        )
+      case AppViews.SETTINGS:
+        return (
+          <MainLayout>
+            <SettingsView />
           </MainLayout>
         )
       case AppViews.REMOTE_CONSOLE:

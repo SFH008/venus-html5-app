@@ -211,7 +211,8 @@
         "cerboOverview": "Vessel Dashboard",
         "switchView": "Vessel Dashboard",
         "watermakerView": "Watermaker",
-        "boatOverview": "Boat Overview"
+        "boatOverview": "Boat Overview",
+        "settings": "Settings"
     },
     "remoteLogin": {
         "2fa": "Two-factor authentication token",

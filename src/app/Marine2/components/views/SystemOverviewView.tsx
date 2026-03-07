@@ -17,8 +17,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react"
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const SIGNALK_HOST = "192.168.76.171"
-const SIGNALK_PORT = 3000
+import { getConfig } from "../../config/AppConfig"
+const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 
 // ─── TANK DEFINITIONS ────────────────────────────────────────────────────────
 // SignalK paths — verify at: http://192.168.76.171:3000/signalk/v1/api/vessels/self/tanks/

@@ -18,6 +18,7 @@ export enum AppViews {
   SYSTEM_OVERVIEW = "system-overview",
   WEATHER_VIEW = "weather-view",
   WEATHER_FORECAST = "weather-forecast",
+  SETTINGS = "settings",
 }
 
 export const AppViewTitleKeys = new Map<AppViews, string>([
@@ -36,6 +37,7 @@ export const AppViewTitleKeys = new Map<AppViews, string>([
   [AppViews.SYSTEM_OVERVIEW, "pages.systemOverview"],
   [AppViews.WEATHER_VIEW, "pages.weatherView"],
   [AppViews.WEATHER_FORECAST, "pages.weatherForecast"],
+  [AppViews.SETTINGS, "pages.settings"],
 ])
 
 export class AppViewsStore {

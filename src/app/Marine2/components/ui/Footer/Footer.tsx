@@ -18,6 +18,7 @@ const NAV_ITEMS: { view: AppViews; icon: string; label: string }[] = [
   { view: AppViews.CERBO_OVERVIEW, icon: "⚡", label: "Cerbo" },
   { view: AppViews.BOX_ENERGY_OVERVIEW, icon: "🔋", label: "Energy" },
   { view: AppViews.BOX_TANKS, icon: "💧", label: "Tanks" },
+  { view: AppViews.SETTINGS, icon: "⚙", label: "Settings" },
 ]
 
 const Footer = ({ pageSelectorProps }: Props) => {

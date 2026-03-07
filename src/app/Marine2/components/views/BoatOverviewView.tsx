@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef, useCallback } from "react"
 import boatLayout from "../../../images/jeanneau53.png"
 
 // ─── SignalK WebSocket hook ────────────────────────────────────────────────────
-const SIGNALK_HOST = "192.168.76.171"
-const SIGNALK_PORT = 3000
+import { getConfig } from "../../config/AppConfig"
+const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 
 interface SignalKValues {
   [path: string]: number | boolean | string | null

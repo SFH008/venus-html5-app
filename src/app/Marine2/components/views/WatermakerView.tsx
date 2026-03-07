@@ -24,8 +24,9 @@ import React, { useState, useEffect, useCallback, useRef } from "react"
 // SignalK server — same host/port as the Venus OS app is served from.
 // The plugin publishes under: vessels.self.watermaker.{hostname}.*
 // Set BRINEOMATIC_HOSTNAME to match what the plugin reports (config.hostname).
-const SIGNALK_HOST = window.location.hostname || "localhost"
-const SIGNALK_PORT = 3000
+import { getConfig } from "../../config/AppConfig"
+const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
+
 const BRINEOMATIC_HOSTNAME = "brineomatic" // matches config.hostname in the plugin
 const SK_BASE = `vessels.self.watermaker.${BRINEOMATIC_HOSTNAME}`
 
