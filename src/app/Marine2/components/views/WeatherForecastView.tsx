@@ -14,9 +14,9 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
+import { getConfig } from "../../config/AppConfig"
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-import { getConfig } from "../../config/AppConfig"
 const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 const FORECAST_HOURS = 24
 const PRESSURE_HOURS = 24

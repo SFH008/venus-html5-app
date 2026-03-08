@@ -6,22 +6,17 @@ import { observer } from "mobx-react"
 import { isError } from "app/utils/util"
 import { AppViews, useAppViewsStore } from "./modules/AppViews"
 import SplashScreen from "./components/views/SplashScreen"
-import BoxView from "./components/views/BoxView"
-import RootView from "./components/views/RootView"
-import RemoteConsoleView from "./components/views/RemoteConsoleView"
 import Connecting from "./components/ui/Connecting"
-import DiagnosticsView from "./components/views/DiagnosticsView"
 import MqttUnavailable from "./components/ui/MqttUnavailable"
 import ErrorFallback from "./components/ui/Error"
-import CerboView from "./components/views/CerboView"
 import BoatOverviewView from "./components/views/BoatOverviewView"
 import DigitalSwitchingView from "./components/views/DigitalSwitchingView"
-import WatermakerView from "./components/views/WatermakerView"
-import SystemOverviewView from "./components/views/SystemOverviewView"
-import MainLayout from "./components/ui/MainLayout"
 import WeatherView from "./components/views/WeatherView"
 import WeatherForecastView from "./components/views/WeatherForecastView"
+import WatermakerView from "./components/views/WatermakerView"
+import SystemOverviewView from "./components/views/SystemOverviewView"
 import SettingsView from "./components/views/SettingsView"
+import MainLayout from "./components/ui/MainLayout"
 
 export const Marine2 = observer((props: AppProps) => {
   // init App
@@ -45,19 +40,7 @@ export const Marine2 = observer((props: AppProps) => {
   }, [appViewsStore.currentView])
 
   const renderView = () => {
-    // Boxes
-    if (/^box\//i.test(currentView)) {
-      return <BoxView boxId={currentView} />
-    }
-
-    // Other views
     switch (currentView) {
-      case AppViews.SYSTEM_OVERVIEW:
-        return (
-          <MainLayout>
-            <SystemOverviewView />
-          </MainLayout>
-        )
       case AppViews.BOAT_OVERVIEW:
         return (
           <MainLayout>
@@ -88,20 +71,24 @@ export const Marine2 = observer((props: AppProps) => {
             <WatermakerView />
           </MainLayout>
         )
+      case AppViews.SYSTEM_OVERVIEW:
+        return (
+          <MainLayout>
+            <SystemOverviewView />
+          </MainLayout>
+        )
       case AppViews.SETTINGS:
         return (
           <MainLayout>
             <SettingsView />
           </MainLayout>
         )
-      case AppViews.REMOTE_CONSOLE:
-        return <RemoteConsoleView host={host} />
-      case AppViews.DIAGNOSTICS:
-        return <DiagnosticsView />
-      case AppViews.CERBO_OVERVIEW:
-        return <CerboView />
       default:
-        return <RootView />
+        return (
+          <MainLayout>
+            <BoatOverviewView />
+          </MainLayout>
+        )
     }
   }
 

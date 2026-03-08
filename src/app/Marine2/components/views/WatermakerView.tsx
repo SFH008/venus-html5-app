@@ -30,11 +30,8 @@ const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 const BRINEOMATIC_HOSTNAME = "brineomatic" // matches config.hostname in the plugin
 const SK_BASE = `vessels.self.watermaker.${BRINEOMATIC_HOSTNAME}`
 
-// Still need direct Yarrboard access for sending commands (PUT via SignalK
-// actionable paths are not yet in the plugin — commands go direct to board).
-const YARRBOARD_HOST = "brineomatic.local"
-const YARRBOARD_USER = "admin"
-const YARRBOARD_PASS = "admin"
+// Yarrboard credentials loaded from AppConfig / SettingsView — not hardcoded
+const { yarrboardHost: YARRBOARD_HOST, yarrboardUser: YARRBOARD_USER, yarrboardPass: YARRBOARD_PASS } = getConfig()
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 type BOMStatus =

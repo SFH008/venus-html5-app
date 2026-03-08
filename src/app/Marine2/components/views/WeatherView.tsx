@@ -17,11 +17,13 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
+import { getConfig, nrAlarmUrl } from "../../config/AppConfig"
 
-// ─── CONFIG ──────────────────────────────────────────────────────────────────
-const SIGNALK_HOST = "192.168.76.171"
-const SIGNALK_PORT = 3000
-const NR_ALARM_URL = `http://${SIGNALK_HOST}:1880/marine-alarm` // Node-RED CAST endpoint
+// ─── CONFIG — loaded from AppConfig / SettingsView ───────────────────────────
+const _cfg = getConfig()
+const SIGNALK_HOST = _cfg.signalkHost
+const SIGNALK_PORT = _cfg.signalkPort
+const NR_ALARM_URL = nrAlarmUrl(_cfg)
 
 // ─── THRESHOLDS ───────────────────────────────────────────────────────────────
 const T = {

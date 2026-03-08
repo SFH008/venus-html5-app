@@ -78,6 +78,36 @@ const TextInput = ({
   />
 )
 
+const PasswordInput = ({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+}) => (
+  <input
+    type="password"
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    placeholder={placeholder}
+    style={{
+      width: "100%",
+      boxSizing: "border-box",
+      background: "rgba(0,0,0,0.5)",
+      border: `1px solid ${C.borderHi}`,
+      borderRadius: 8,
+      padding: "14px 16px",
+      fontSize: 17,
+      color: C.text,
+      fontFamily: C.mono,
+      outline: "none",
+      letterSpacing: "0.06em",
+    }}
+  />
+)
+
 const NumberInput = ({
   value,
   onChange,
@@ -290,7 +320,15 @@ const SettingsView = () => {
       return
     }
     if (draft.signalkPort < 1 || draft.signalkPort > 65535) {
-      showToast("Port must be between 1–65535", "error")
+      showToast("SignalK port must be between 1–65535", "error")
+      return
+    }
+    if (draft.nodeRedPort < 1 || draft.nodeRedPort > 65535) {
+      showToast("Node-RED port must be between 1–65535", "error")
+      return
+    }
+    if (!draft.alarmPath.trim().startsWith("/")) {
+      showToast("Alarm path must start with /", "error")
       return
     }
     save(draft)
@@ -420,6 +458,65 @@ const SettingsView = () => {
                 REST API:{" "}
                 <span style={{ color: C.textDim }}>
                   http://{draft.signalkHost}:{draft.signalkPort}/signalk/v1/api/
+                </span>
+              </div>
+            </div>
+          </Section>
+
+          {/* ── Yarrboard ── */}
+          <Section title="Yarrboard" icon="⚡">
+            <FieldRow label="Yarrboard Host" hint="Hostname or IP of the Yarrboard DC power controller">
+              <TextInput
+                value={draft.yarrboardHost}
+                onChange={(v) => update("yarrboardHost", v)}
+                placeholder={CONFIG_DEFAULTS.yarrboardHost}
+              />
+            </FieldRow>
+            <FieldRow label="Username" hint="Yarrboard API username">
+              <TextInput value={draft.yarrboardUser} onChange={(v) => update("yarrboardUser", v)} placeholder="admin" />
+            </FieldRow>
+            <FieldRow label="Password" hint="Yarrboard API password">
+              <PasswordInput
+                value={draft.yarrboardPass}
+                onChange={(v) => update("yarrboardPass", v)}
+                placeholder="••••••"
+              />
+            </FieldRow>
+          </Section>
+
+          {/* ── Node-RED ── */}
+          <Section title="Node-RED Alarms" icon="🔔">
+            <FieldRow label="Node-RED Port" hint="HTTP port for Node-RED (typically 1880)">
+              <NumberInput value={draft.nodeRedPort} onChange={(v) => update("nodeRedPort", v)} min={1} max={65535} />
+              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>Default: {CONFIG_DEFAULTS.nodeRedPort}</div>
+            </FieldRow>
+            <FieldRow label="Alarm Webhook Path" hint="Node-RED HTTP-In endpoint for marine alarms">
+              <TextInput
+                value={draft.alarmPath}
+                onChange={(v) => update("alarmPath", v)}
+                placeholder={CONFIG_DEFAULTS.alarmPath}
+              />
+              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>Default: {CONFIG_DEFAULTS.alarmPath}</div>
+            </FieldRow>
+            <div
+              style={{
+                padding: "10px 12px",
+                background: "rgba(0,210,255,0.03)",
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+              }}
+            >
+              <div style={{ fontSize: 13, color: C.textDim, lineHeight: 1.9 }}>
+                Alarm URL:{" "}
+                <span style={{ color: C.text }}>
+                  http://{draft.signalkHost}:{draft.nodeRedPort}
+                  {draft.alarmPath}
+                </span>
+                <br />
+                Clear URL:{" "}
+                <span style={{ color: C.text }}>
+                  http://{draft.signalkHost}:{draft.nodeRedPort}
+                  {draft.alarmPath}/clear
                 </span>
               </div>
             </div>
