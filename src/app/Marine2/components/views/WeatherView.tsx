@@ -151,14 +151,32 @@ function twoLevelAlarm(
 
 // ─── AUDIO / NODE-RED ─────────────────────────────────────────────────────────
 const lastAudioFired = new Map<string, number>()
+// Zone determines which speaker(s) the alarm is sent to.
+// "helm"  = cockpit / helm station speaker only
+// "cabin" = below-deck speaker only
+// "all"   = both helm and cabin
+const ALARM_ZONES: Record<string, string> = {
+  "sustained-wind": "all",
+  "wind-shift": "helm",
+  "veer-back": "helm",
+  reversal: "all",
+  "tws-trend": "helm",
+  "dir-rate": "helm",
+  "baro-combined": "all",
+  heel: "all",
+  slam: "helm",
+  overpowered: "all",
+}
+
 function fireAudio(id: string, message: string) {
   const last = lastAudioFired.get(id) ?? 0
   if (Date.now() - last < 60000) return // max once per minute per alarm
   lastAudioFired.set(id, Date.now())
+  const zone = ALARM_ZONES[id] ?? "helm"
   fetch(NR_ALARM_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, message, severity: "alarm" }),
+    body: JSON.stringify({ id, message, severity: "alarm", zone }),
   }).catch(() => {})
 }
 function clearAudio(id: string) {
