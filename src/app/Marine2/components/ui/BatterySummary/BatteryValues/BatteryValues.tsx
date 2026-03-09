@@ -1,6 +1,6 @@
 import { FC } from "react"
 import classNames from "classnames"
-import { BatteryState } from "@victronenergy/mfd-modules"
+import { BatteryState, PowerUnit } from "@victronenergy/mfd-modules"
 import { ISize } from "@m2Types/generic/size"
 import { batteryStateFor } from "../../../../utils/formatters/devices/battery/battery-state-for"
 import { applyStyles } from "../../../../utils/media"
@@ -17,7 +17,7 @@ interface Props {
 export const BatteryValues: FC<Props> = ({ battery, boxSize, electricalPowerIndicator }) => {
   const activeStyles = applyStyles(boxSize, Styles)
 
-  const showWatts = electricalPowerIndicator === 0
+  const showWatts = electricalPowerIndicator === PowerUnit.WATTS
 
   return (
     <div className="flex flex-col items-center">
