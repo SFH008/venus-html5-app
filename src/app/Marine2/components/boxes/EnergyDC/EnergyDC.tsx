@@ -6,8 +6,8 @@ import ValueOverview from "../../ui/ValueOverview"
 import { ComponentMode } from "@m2Types/generic/component-mode"
 import { responsiveBoxIcon } from "../../../utils/helpers/classes/responsive-box-icon"
 import { ISize } from "@m2Types/generic/size"
-import { valueFor } from "app/Marine2/utils/formatters/phase/phase-value-for"
-import { unitFor } from "app/Marine2/utils/formatters/phase/phase-unit-for"
+import { dcValueFor } from "app/Marine2/utils/formatters/phase/phase-value-for"
+import { dcUnitFor } from "app/Marine2/utils/formatters/phase/phase-unit-for"
 import { observer } from "mobx-react"
 
 interface Props {
@@ -29,8 +29,8 @@ const EnergyDC = ({ componentMode = "compact", dcLoads, compactBoxSize }: Props)
       <ValueOverview
         Icon={DCIcon}
         title={translate("boxes.dcLoads")}
-        value={valueFor(current, power, electricalPowerIndicator)}
-        unit={unitFor(electricalPowerIndicator)}
+        value={dcValueFor(current, power, electricalPowerIndicator)}
+        unit={dcUnitFor(electricalPowerIndicator)}
         boxSize={compactBoxSize}
       />
     )
@@ -40,8 +40,8 @@ const EnergyDC = ({ componentMode = "compact", dcLoads, compactBoxSize }: Props)
     <ValueBox
       title={translate("boxes.dcLoads")}
       icon={<DCIcon className={responsiveBoxIcon} />}
-      value={valueFor(current, power, electricalPowerIndicator)}
-      unit={unitFor(electricalPowerIndicator)}
+      value={dcValueFor(current, power, electricalPowerIndicator)}
+      unit={dcUnitFor(electricalPowerIndicator)}
       bottomValues={[
         [
           { value: voltage, unit: "V", hideDecimal: true },
