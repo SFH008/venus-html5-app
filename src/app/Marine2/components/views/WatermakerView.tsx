@@ -30,8 +30,10 @@ const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 const BRINEOMATIC_HOSTNAME = "brineomatic" // matches config.hostname in the plugin
 const SK_BASE = `vessels.self.watermaker.${BRINEOMATIC_HOSTNAME}`
 
-// Yarrboard credentials loaded from AppConfig / SettingsView — not hardcoded
-const { yarrboardHost: YARRBOARD_HOST, yarrboardUser: YARRBOARD_USER, yarrboardPass: YARRBOARD_PASS } = getConfig()
+function getYarrboardConfig() {
+  const cfg = getConfig()
+  return { host: cfg.yarrboardHost, user: cfg.yarrboardUser, pass: cfg.yarrboardPass }
+}
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
 type BOMStatus =
@@ -237,10 +239,11 @@ function useSignalKBrineomatic() {
 // ─── COMMAND API (still direct to Yarrboard — plugin has no PUT handler yet) ─
 async function apiCmd(cmd: string, extra?: Record<string, unknown>): Promise<boolean> {
   try {
-    const res = await fetch(`http://${YARRBOARD_HOST}/api/endpoint`, {
+    const { host, user, pass } = getYarrboardConfig()
+    const res = await fetch(`http://${host}/api/endpoint`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cmd, user: YARRBOARD_USER, pass: YARRBOARD_PASS, ...extra }),
+      body: JSON.stringify({ cmd, user, pass, ...extra }),
       signal: AbortSignal.timeout(3000),
     })
     return res.ok
@@ -374,7 +377,7 @@ const styles = `
   /* ── Gauges grid ── */
   .wm-gauges {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 8px;
     flex-shrink: 0;
   }
@@ -459,9 +462,10 @@ const styles = `
     min-height: 0;
   }
 
-  /* Info panel */
+  /* Info panel — 50% */
   .wm-info {
     flex: 1;
+    max-width: 50%;
     background: linear-gradient(135deg, #0d1824 0%, #0a1420 100%);
     border: 1px solid #1a3a5a;
     border-radius: 4px;
@@ -531,10 +535,10 @@ const styles = `
   .wm-progress-fill.flush  { background: linear-gradient(90deg, #1a4a70, #38bdf8); }
   .wm-progress-fill.pickle { background: linear-gradient(90deg, #5a3a10, #fbbf24); }
 
-  /* Component status */
+  /* Component status — 50% */
   .wm-components {
-    width: 200px;
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
     background: linear-gradient(135deg, #0d1824 0%, #0a1420 100%);
     border: 1px solid #1a3a5a;
     border-radius: 4px;
@@ -565,23 +569,155 @@ const styles = `
 
   .wm-comp-name {
     color: #4a7a9a;
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 16px;
+    font-weight: 600;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .wm-comp-dot {
-    width: 12px;
-    height: 12px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
     flex-shrink: 0;
     transition: all 0.3s;
   }
-  .wm-comp-dot.on  { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
-  .wm-comp-dot.off { background: #1a3a2a; border: 1px solid #2a4a3a; }
-  .wm-comp-dot.na  { background: #2a3a4a; border: 1px solid #1a2a3a; }
+  .wm-comp-dot.on  { background: #4ade80; box-shadow: 0 0 12px #4ade80aa; }
+  .wm-comp-dot.off { background: #1a3a2a; border: 2px solid #2a4a3a; }
+  .wm-comp-dot.na  { background: #2a3a4a; border: 2px solid #1a2a3a; }
+
+  /* ── Component 2×2 grid ── */
+  .wm-comp-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 12px;
+    flex: 1;
+  }
+
+  .wm-comp-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+  }
+
+  /* ── Stat tile (in gauges row 3) ── */
+  .wm-stat-tile {
+    background: #0a1218;
+    border: 1px solid #152030;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 100px;
+  }
+
+  .wm-stat-tile .wm-stat-key {
+    font-size: 12px;
+    color: #2a5a7a;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .wm-stat-tile .wm-stat-val {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 20px;
+    color: #7ab8d4;
+  }
+
+  /* ── Manual controls panel ── */
+  .wm-manual-panel {
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #0d1824 0%, #0a1420 100%);
+    border: 1px solid #2a5a3a;
+    border-radius: 4px;
+    padding: 8px 12px;
+  }
+
+  .wm-manual-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-top: 6px;
+  }
+
+  .wm-manual-btn-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .wm-manual-label {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a7a9a;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  .wm-manual-toggle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 8px 6px;
+    border-radius: 4px;
+    border: 1px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.15s ease;
+    width: 100%;
+    letter-spacing: 0.06em;
+    min-height: 42px;
+  }
+  .wm-manual-toggle.on {
+    color: #4ade80;
+    border-color: #4ade8077;
+    background: #0a1e0a;
+    box-shadow: 0 0 10px #4ade8033;
+  }
+  .wm-manual-toggle.on:hover  { background: #0d2a0d; border-color: #4ade80bb; }
+  .wm-manual-toggle.off {
+    color: #4a7a9a;
+    border-color: #1a3a5a;
+    background: #0a1218;
+  }
+  .wm-manual-toggle.off:hover { background: #0d1a28; border-color: #2a5a7a; color: #7ab8d4; }
+
+  /* ── Enlarged component dots ── */
+  .wm-comp-toggle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 3px;
+    border: 1px solid;
+    cursor: pointer;
+    background: transparent;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    letter-spacing: 0.06em;
+  }
+  .wm-comp-toggle.on  {
+    color: #4ade80;
+    border-color: #4ade8077;
+    background: #0a1e0a;
+    box-shadow: 0 0 8px #4ade8033;
+  }
+  .wm-comp-toggle.on:hover  { background: #0d2a0d; border-color: #4ade80bb; }
+  .wm-comp-toggle.off {
+    color: #4a7a9a;
+    border-color: #1a3a5a;
+    background: #0a1218;
+  }
+  .wm-comp-toggle.off:hover { background: #0d1a28; border-color: #2a5a7a; color: #7ab8d4; }
 
   /* ── Control buttons ── */
   .wm-controls {
@@ -1093,6 +1229,7 @@ function Modal({
   const [runDuration, setRunDuration] = useState("3.5")
   const [runVolume, setRunVolume] = useState("250")
   const [flushDuration, setFlushDuration] = useState("5")
+  const [flushVolume, setFlushVolume] = useState("15")
   const [pickleDuration, setPickleDuration] = useState("5")
   const [depickleDuration, setDepickleDuration] = useState("15")
 
@@ -1114,7 +1251,7 @@ function Modal({
                 <button
                   className="wm-modal-btn confirm-green"
                   onClick={() => {
-                    onCmd("start_brineomatic")
+                    onCmd("start_watermaker")
                     onClose()
                   }}
                 >
@@ -1131,7 +1268,7 @@ function Modal({
                 <button
                   className="wm-modal-btn confirm-green"
                   onClick={() => {
-                    onCmd("start_brineomatic_duration", { duration: hoursToMs(runDuration) })
+                    onCmd("start_watermaker", { duration: hoursToMs(runDuration) })
                     onClose()
                   }}
                 >
@@ -1148,7 +1285,7 @@ function Modal({
                 <button
                   className="wm-modal-btn confirm-green"
                   onClick={() => {
-                    onCmd("start_brineomatic_volume", { volume: parseFloat(runVolume) })
+                    onCmd("start_watermaker", { volume: parseFloat(runVolume) })
                     onClose()
                   }}
                 >
@@ -1166,29 +1303,63 @@ function Modal({
 
         {type === "flush" && (
           <>
-            <div className="wm-modal-title">💧 Flush Watermaker</div>
-            <div className="wm-modal-body">Flush the watermaker membranes with fresh water.</div>
-            <div className="wm-input-row" style={{ marginBottom: 12 }}>
-              <input
-                className="wm-input"
-                value={flushDuration}
-                onChange={(e) => setFlushDuration(e.target.value)}
-                style={{ width: 70 }}
-              />
-              <span className="wm-input-unit">minutes</span>
+            <div className="wm-modal-title">💧 Flush Watermaker — Choose Mode</div>
+            <div className="wm-start-modes">
+              <div className="wm-mode-card">
+                <h4>Automatic</h4>
+                <p>Flush until clean (salinity-based stop)</p>
+                <button
+                  className="wm-modal-btn confirm-blue"
+                  onClick={() => {
+                    onCmd("flush_watermaker")
+                    onClose()
+                  }}
+                >
+                  FLUSH
+                </button>
+              </div>
+              <div className="wm-mode-card">
+                <h4>Duration</h4>
+                <p>Flush for the time below</p>
+                <div className="wm-input-row">
+                  <input
+                    className="wm-input"
+                    value={flushDuration}
+                    onChange={(e) => setFlushDuration(e.target.value)}
+                  />
+                  <span className="wm-input-unit">min</span>
+                </div>
+                <button
+                  className="wm-modal-btn confirm-blue"
+                  onClick={() => {
+                    onCmd("flush_watermaker", { duration: minsToMs(flushDuration) })
+                    onClose()
+                  }}
+                >
+                  FLUSH
+                </button>
+              </div>
+              <div className="wm-mode-card">
+                <h4>Volume</h4>
+                <p>Flush the amount below</p>
+                <div className="wm-input-row">
+                  <input className="wm-input" value={flushVolume} onChange={(e) => setFlushVolume(e.target.value)} />
+                  <span className="wm-input-unit">L</span>
+                </div>
+                <button
+                  className="wm-modal-btn confirm-blue"
+                  onClick={() => {
+                    onCmd("flush_watermaker", { volume: parseFloat(flushVolume) })
+                    onClose()
+                  }}
+                >
+                  FLUSH
+                </button>
+              </div>
             </div>
             <div className="wm-modal-footer">
               <button className="wm-modal-btn cancel" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                className="wm-modal-btn confirm-blue"
-                onClick={() => {
-                  onCmd("flush_brineomatic", { duration: minsToMs(flushDuration) })
-                  onClose()
-                }}
-              >
-                Flush
               </button>
             </div>
           </>
@@ -1217,7 +1388,7 @@ function Modal({
               <button
                 className="wm-modal-btn confirm-yellow"
                 onClick={() => {
-                  onCmd("pickle_brineomatic", { duration: minsToMs(pickleDuration) })
+                  onCmd("pickle_watermaker", { duration: minsToMs(pickleDuration) })
                   onClose()
                 }}
               >
@@ -1249,7 +1420,7 @@ function Modal({
               <button
                 className="wm-modal-btn confirm-purple"
                 onClick={() => {
-                  onCmd("depickle_brineomatic", { duration: minsToMs(depickleDuration) })
+                  onCmd("depickle_watermaker", { duration: minsToMs(depickleDuration) })
                   onClose()
                 }}
               >
@@ -1274,7 +1445,7 @@ function Modal({
               <button
                 className="wm-modal-btn confirm-red"
                 onClick={() => {
-                  onCmd("stop_brineomatic")
+                  onCmd("stop_watermaker")
                   onClose()
                 }}
               >
@@ -1299,7 +1470,7 @@ function Modal({
               <button
                 className="wm-modal-btn confirm-green"
                 onClick={() => {
-                  onCmd("manual_brineomatic")
+                  onCmd("manual_watermaker")
                   onClose()
                 }}
               >
@@ -1354,6 +1525,7 @@ export const WatermakerView: React.FC = () => {
 
           {/* ── Gauges ── */}
           <div className="wm-gauges">
+            {/* Row 1: Pressures + Product */}
             <ArcGauge
               label="Filter Press"
               unit="PSI"
@@ -1381,7 +1553,7 @@ export const WatermakerView: React.FC = () => {
               fmt={fmt0}
             />
             <ArcGauge
-              label="Salinity"
+              label="Product Sal"
               unit="PPM"
               value={state?.product_salinity ?? 0}
               min={0}
@@ -1394,12 +1566,31 @@ export const WatermakerView: React.FC = () => {
               fmt={fmt0}
             />
             <ArcGauge
-              label="Flow Rate"
+              label="Brine Sal"
+              unit="PPM"
+              value={state?.brine_salinity ?? 0}
+              min={0}
+              max={60000}
+              color="#fb923c"
+              fmt={fmt0}
+            />
+            <ArcGauge
+              label="Product Flow"
               unit="LPH"
               value={state?.product_flowrate ?? 0}
               min={0}
               max={100}
               color="#34d399"
+              fmt={fmt1}
+            />
+            {/* Row 2: Brine + Temps + Tank + Volume */}
+            <ArcGauge
+              label="Brine Flow"
+              unit="LPH"
+              value={state?.brine_flowrate ?? 0}
+              min={0}
+              max={300}
+              color="#f97316"
               fmt={fmt1}
             />
             <ArcGauge
@@ -1444,6 +1635,21 @@ export const WatermakerView: React.FC = () => {
               color="#a78bfa"
               fmt={fmt1}
             />
+            {/* Row 3: 2 spacers + 3 stat tiles aligned under Tank Level & Produced */}
+            <div />
+            <div />
+            <div className="wm-stat-tile">
+              <span className="wm-stat-key">Session Vol</span>
+              <span className="wm-stat-val">{state ? fmt1(state.volume) : "—"} L</span>
+            </div>
+            <div className="wm-stat-tile">
+              <span className="wm-stat-key">Flush Vol</span>
+              <span className="wm-stat-val">{state ? fmt1(state.flush_volume) : "—"} L</span>
+            </div>
+            <div className="wm-stat-tile">
+              <span className="wm-stat-key">Total Flow</span>
+              <span className="wm-stat-val">{state ? fmt1(state.total_flowrate) : "—"} LPH</span>
+            </div>
           </div>
 
           {/* ── Middle: info + components ── */}
@@ -1568,42 +1774,79 @@ export const WatermakerView: React.FC = () => {
               )}
             </div>
 
-            {/* Component status */}
+            {/* Component status / manual toggles */}
             <div className="wm-components">
               <div className="wm-comp-title">Components</div>
-              {[
-                { label: "Boost Pump", key: "boost_pump_on", val: state?.boost_pump_on },
-                { label: "HP Pump", key: "high_pressure_pump_on", val: state?.high_pressure_pump_on },
-                { label: "Diverter Vlv", key: "diverter_valve_open", val: state?.diverter_valve_open },
-                { label: "Flush Valve", key: "flush_valve_open", val: state?.flush_valve_open },
-                { label: "Cooling Fan", key: "cooling_fan_on", val: state?.cooling_fan_on },
-              ].map(({ label, key, val }) => (
-                <div className="wm-comp-row" key={key}>
-                  <span className="wm-comp-name">{label}</span>
-                  <div className={`wm-comp-dot ${val === undefined ? "na" : val ? "on" : "off"}`} />
-                </div>
-              ))}
-
-              <div style={{ flex: 1 }} />
-
-              {/* Brine salinity */}
-              <div className="wm-info-title" style={{ marginTop: 8 }}>
-                Brine
-              </div>
-              <div className="wm-comp-row">
-                <span className="wm-comp-name">Salinity</span>
-                <span style={{ fontFamily: "'Share Tech Mono'", fontSize: 15, color: "#7ab8d4" }}>
-                  {state ? fmt0(state.brine_salinity) : "—"}
-                </span>
-              </div>
-              <div className="wm-comp-row">
-                <span className="wm-comp-name">Flow</span>
-                <span style={{ fontFamily: "'Share Tech Mono'", fontSize: 15, color: "#7ab8d4" }}>
-                  {state ? fmt1(state.brine_flowrate) : "—"}
-                </span>
+              <div className="wm-comp-grid">
+                {[
+                  { label: "Boost Pump", key: "boost_pump_on", val: state?.boost_pump_on },
+                  { label: "HP Pump", key: "high_pressure_pump_on", val: state?.high_pressure_pump_on },
+                  { label: "Diverter Vlv", key: "diverter_valve_open", val: state?.diverter_valve_open },
+                  { label: "Flush Valve", key: "flush_valve_open", val: state?.flush_valve_open },
+                  { label: "Cooling Fan", key: "cooling_fan_on", val: state?.cooling_fan_on },
+                ].map(({ label, key, val }) => (
+                  <div className="wm-comp-cell" key={key}>
+                    <div className={`wm-comp-dot ${val === undefined ? "na" : val ? "on" : "off"}`} />
+                    <span className="wm-comp-name">{label}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
+
+          {/* ── Manual controls panel — visible only in MANUAL mode ── */}
+          {isManual && (
+            <div className="wm-manual-panel">
+              <div className="wm-comp-title">Manual Controls</div>
+              <div className="wm-manual-grid">
+                {[
+                  { label: "Boost Pump", cmd: "boost_pump", val: state?.boost_pump_on, onLabel: "ON", offLabel: "OFF" },
+                  {
+                    label: "HP Pump",
+                    cmd: "high_pressure_pump",
+                    val: state?.high_pressure_pump_on,
+                    onLabel: "ON",
+                    offLabel: "OFF",
+                  },
+                  {
+                    label: "Diverter Vlv",
+                    cmd: "diverter_valve",
+                    val: state?.diverter_valve_open,
+                    onLabel: "OVERBOARD",
+                    offLabel: "TO TANK",
+                  },
+                  {
+                    label: "Flush Valve",
+                    cmd: "flush_valve",
+                    val: state?.flush_valve_open,
+                    onLabel: "OPEN",
+                    offLabel: "CLOSED",
+                  },
+                  {
+                    label: "Cooling Fan",
+                    cmd: "cooling_fan",
+                    val: state?.cooling_fan_on,
+                    onLabel: "ON",
+                    offLabel: "OFF",
+                  },
+                ].map(({ label, cmd, val, onLabel, offLabel }) => (
+                  <div className="wm-manual-btn-wrap" key={cmd}>
+                    <div className="wm-manual-label">{label}</div>
+                    <button
+                      className={`wm-manual-toggle ${val ? "on" : "off"}`}
+                      onClick={() => sendCmd("set_watermaker", { [cmd]: "TOGGLE" })}
+                    >
+                      {val ? onLabel : offLabel}
+                    </button>
+                  </div>
+                ))}
+                <div className="wm-manual-btn-wrap">
+                  <div className="wm-manual-label">HP Valve</div>
+                  <button className="wm-manual-toggle off">ADVANCED</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Control buttons ── */}
           <div className="wm-controls">
@@ -1632,34 +1875,18 @@ export const WatermakerView: React.FC = () => {
               <span>STOP</span>
             </button>
 
-            <button className="wm-btn manual" disabled={!isIdle} onClick={() => setModal("manual")}>
+            <button className="wm-btn manual" onClick={() => setModal("manual")}>
               <IconWrench />
               <span>MANUAL</span>
             </button>
 
-            <button className="wm-btn idle" disabled={!isManual} onClick={() => sendCmd("idle_brineomatic")}>
+            <button className="wm-btn idle" disabled={!isManual} onClick={() => sendCmd("idle_watermaker")}>
               <IconBack />
-              <span>IDLE</span>
+              <span>{isManual ? "BACK" : "IDLE"}</span>
             </button>
 
             {/* Spacer */}
             <div />
-          </div>
-
-          {/* ── Stats footer ── */}
-          <div className="wm-stats">
-            <div className="wm-stat">
-              <span className="wm-stat-key">Session Vol</span>
-              <span className="wm-stat-val">{state ? fmt1(state.volume) : "—"} L</span>
-            </div>
-            <div className="wm-stat">
-              <span className="wm-stat-key">Flush Vol</span>
-              <span className="wm-stat-val">{state ? fmt1(state.flush_volume) : "—"} L</span>
-            </div>
-            <div className="wm-stat">
-              <span className="wm-stat-key">Total Flow</span>
-              <span className="wm-stat-val">{state ? fmt1(state.total_flowrate) : "—"} LPH</span>
-            </div>
           </div>
         </div>
 

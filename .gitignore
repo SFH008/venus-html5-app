@@ -36,3 +36,6 @@ cypress/report
 
 # deploy scripts
 networks.csv
+public/standalone.html
+src/app/Marine2/standalone.html
+src/app/Marine2/components/views/standalone-watermaker.tsx

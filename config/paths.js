@@ -52,8 +52,12 @@ module.exports = {
   appPath: resolveApp("."),
   appBuild: resolveApp(buildPath),
   appPublic: resolveApp("public"),
-  appHtml: resolveApp("public/index.html"),
-  appIndexJs: resolveModule(resolveApp, "src/index"),
+  appHtml: process.env.STANDALONE
+    ? resolveApp("public/standalone.html")
+    : resolveApp("public/index.html"),
+  appIndexJs: process.env.STANDALONE
+    ? resolveModule(resolveApp, "src/app/Marine2/components/views/standalone-watermaker")
+    : resolveModule(resolveApp, "src/index"),
   appPackageJson: resolveApp("package.json"),
   appSrc: resolveApp("src"),
   appTsConfig: resolveApp("tsconfig.json"),

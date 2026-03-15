@@ -114,37 +114,42 @@ const NumberInput = ({
   min,
   max,
   step,
+  unit,
 }: {
   value: number
   onChange: (v: number) => void
   min?: number
   max?: number
   step?: number
+  unit?: string
 }) => (
-  <input
-    type="number"
-    value={value}
-    min={min}
-    max={max}
-    step={step ?? 1}
-    onChange={(e) => {
-      const n = parseFloat(e.target.value)
-      if (!isNaN(n)) onChange(n)
-    }}
-    style={{
-      width: "100%",
-      boxSizing: "border-box",
-      background: "rgba(0,0,0,0.5)",
-      border: `1px solid ${C.borderHi}`,
-      borderRadius: 8,
-      padding: "14px 16px",
-      fontSize: 17,
-      color: C.text,
-      fontFamily: C.mono,
-      outline: "none",
-      letterSpacing: "0.06em",
-    }}
-  />
+  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <input
+      type="number"
+      value={value}
+      min={min}
+      max={max}
+      step={step ?? 1}
+      onChange={(e) => {
+        const n = parseFloat(e.target.value)
+        if (!isNaN(n)) onChange(n)
+      }}
+      style={{
+        flex: 1,
+        boxSizing: "border-box",
+        background: "rgba(0,0,0,0.5)",
+        border: `1px solid ${C.borderHi}`,
+        borderRadius: 8,
+        padding: "14px 16px",
+        fontSize: 17,
+        color: C.text,
+        fontFamily: C.mono,
+        outline: "none",
+        letterSpacing: "0.06em",
+      }}
+    />
+    {unit && <span style={{ fontSize: 14, color: C.textDim, fontFamily: C.mono, minWidth: 28 }}>{unit}</span>}
+  </div>
 )
 
 const SliderInput = ({
@@ -484,42 +489,223 @@ const SettingsView = () => {
             </FieldRow>
           </Section>
 
-          {/* ── Node-RED ── */}
-          <Section title="Node-RED Alarms" icon="🔔">
-            <FieldRow label="Node-RED Port" hint="HTTP port for Node-RED (typically 1880)">
-              <NumberInput value={draft.nodeRedPort} onChange={(v) => update("nodeRedPort", v)} min={1} max={65535} />
-              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>Default: {CONFIG_DEFAULTS.nodeRedPort}</div>
-            </FieldRow>
-            <FieldRow label="Alarm Webhook Path" hint="Node-RED HTTP-In endpoint for marine alarms">
+          {/* ── Alarms ── */}
+          <Section title="Alarms" icon="🔔">
+            <FieldRow
+              label="Notification Path"
+              hint="SignalK notifications tree prefix — must start with 'notifications.'"
+            >
               <TextInput
-                value={draft.alarmPath}
-                onChange={(v) => update("alarmPath", v)}
-                placeholder={CONFIG_DEFAULTS.alarmPath}
+                value={draft.notifPrefix}
+                onChange={(v) => update("notifPrefix", v)}
+                placeholder={CONFIG_DEFAULTS.notifPrefix}
               />
-              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>Default: {CONFIG_DEFAULTS.alarmPath}</div>
+              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>
+                Alarms are written to:{" "}
+                <span style={{ color: C.text }}>
+                  {draft.signalkHost}:{draft.signalkPort}/signalk/v1/api/vessels/self/
+                  {draft.notifPrefix.split(".").join("/")}/[id]
+                </span>
+              </div>
             </FieldRow>
+
+            <FieldRow label="Emergency repeat" hint="Seconds between repeated announcements (0 = no repeat)">
+              <NumberInput
+                value={draft.repeatEmergency}
+                onChange={(v) => update("repeatEmergency", v)}
+                min={0}
+                max={300}
+              />
+            </FieldRow>
+            <FieldRow label="Alarm repeat" hint="Seconds between repeated announcements (0 = no repeat)">
+              <NumberInput value={draft.repeatAlarm} onChange={(v) => update("repeatAlarm", v)} min={0} max={600} />
+            </FieldRow>
+
             <div
               style={{
+                marginTop: 12,
+                marginBottom: 4,
+                fontSize: 13,
+                color: C.textDim,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+              }}
+            >
+              Speaker volumes (0–100)
+            </div>
+            <FieldRow label="Emergency" hint="Volume for emergency announcements">
+              <SliderInput
+                value={draft.volEmergency}
+                onChange={(v) => update("volEmergency", v)}
+                min={0}
+                max={100}
+                step={5}
+                labels={["0", "50", "100"]}
+              />
+            </FieldRow>
+            <FieldRow label="Alarm" hint="Volume for alarm announcements">
+              <SliderInput
+                value={draft.volAlarm}
+                onChange={(v) => update("volAlarm", v)}
+                min={0}
+                max={100}
+                step={5}
+                labels={["0", "50", "100"]}
+              />
+            </FieldRow>
+            <FieldRow label="Warning" hint="Volume for warning announcements">
+              <SliderInput
+                value={draft.volWarn}
+                onChange={(v) => update("volWarn", v)}
+                min={0}
+                max={100}
+                step={5}
+                labels={["0", "50", "100"]}
+              />
+            </FieldRow>
+            <FieldRow label="Normal" hint="Volume for informational announcements">
+              <SliderInput
+                value={draft.volNormal}
+                onChange={(v) => update("volNormal", v)}
+                min={0}
+                max={100}
+                step={5}
+                labels={["0", "50", "100"]}
+              />
+            </FieldRow>
+
+            <div
+              style={{
+                marginTop: 8,
                 padding: "10px 12px",
                 background: "rgba(0,210,255,0.03)",
                 border: `1px solid ${C.border}`,
                 borderRadius: 6,
               }}
             >
-              <div style={{ fontSize: 13, color: C.textDim, lineHeight: 1.9 }}>
-                Alarm URL:{" "}
-                <span style={{ color: C.text }}>
-                  http://{draft.signalkHost}:{draft.nodeRedPort}
-                  {draft.alarmPath}
-                </span>
-                <br />
-                Clear URL:{" "}
-                <span style={{ color: C.text }}>
-                  http://{draft.signalkHost}:{draft.nodeRedPort}
-                  {draft.alarmPath}/clear
-                </span>
+              <div style={{ fontSize: 13, color: C.textDim, lineHeight: 2.0 }}>
+                <span style={{ color: "#ef4444" }}>Emergency</span> — repeat every {draft.repeatEmergency}s · vol{" "}
+                {draft.volEmergency}%<br />
+                <span style={{ color: "#f97316" }}>Alarm</span> — repeat every {draft.repeatAlarm}s · vol{" "}
+                {draft.volAlarm}%<br />
+                <span style={{ color: "#fbbf24" }}>Warning</span> — once only · vol {draft.volWarn}%<br />
+                <span style={{ color: "#38bdf8" }}>Normal</span> — once only · vol {draft.volNormal}%
               </div>
             </div>
+          </Section>
+
+          {/* ── PowerView ── */}
+          <Section title="PowerView — Device Paths" icon="⚡">
+            <div
+              style={{
+                padding: "8px 12px",
+                marginBottom: 12,
+                background: "rgba(251,191,36,0.05)",
+                border: "1px solid rgba(251,191,36,0.2)",
+                borderRadius: 6,
+              }}
+            >
+              <div style={{ fontSize: 12, color: "rgba(251,191,36,0.8)", lineHeight: 1.8 }}>
+                signalk-venus-plugin uses numeric Cerbo GX D-Bus instance IDs in paths.
+                <br />
+                Check{" "}
+                <span style={{ color: C.text }}>
+                  http://{draft.signalkHost}:{draft.signalkPort}/admin/#/databroker
+                </span>{" "}
+                to find your actual paths.
+              </div>
+            </div>
+            <FieldRow label="Battery path" hint="SignalK path for house battery bank (BMV712 + REC BMS)">
+              <TextInput
+                value={draft.pvBatteryPath}
+                onChange={(v) => update("pvBatteryPath", v)}
+                placeholder="electrical.batteries.0"
+              />
+            </FieldRow>
+            <FieldRow label="Solar charger path" hint="SignalK path for MPPT solar charger">
+              <TextInput
+                value={draft.pvSolarPath}
+                onChange={(v) => update("pvSolarPath", v)}
+                placeholder="electrical.solar.288"
+              />
+            </FieldRow>
+            <FieldRow label="Inverter path" hint="SignalK path for Quattro inverter/charger">
+              <TextInput
+                value={draft.pvInverterPath}
+                onChange={(v) => update("pvInverterPath", v)}
+                placeholder="electrical.inverters.288"
+              />
+            </FieldRow>
+            <FieldRow
+              label="BMV712 relay path"
+              hint="SignalK switch path for BMV712 aux relay (set to manual in VictronConnect first)"
+            >
+              <TextInput
+                value={draft.pvBmvRelayPath}
+                onChange={(v) => update("pvBmvRelayPath", v)}
+                placeholder="electrical.switches.1"
+              />
+            </FieldRow>
+            <FieldRow label="REC BMS WebSocket" hint="WebSocket URL for REC BMS WiFi module">
+              <TextInput
+                value={draft.pvRecBmsWsUrl}
+                onChange={(v) => update("pvRecBmsWsUrl", v)}
+                placeholder="ws://192.168.76.x:8080"
+              />
+            </FieldRow>
+            <div style={{ marginTop: 8, marginBottom: 4, fontSize: 11, color: C.textDim, letterSpacing: "0.08em" }}>
+              ALARM THRESHOLDS
+            </div>
+            <FieldRow label="Low SoC alarm" hint="Fire alarm when battery SoC falls below this value">
+              <NumberInput
+                value={draft.pvAlarmSocLow}
+                onChange={(v) => update("pvAlarmSocLow", v)}
+                min={5}
+                max={50}
+                step={1}
+                unit="%"
+              />
+            </FieldRow>
+            <FieldRow label="High SoC warn" hint="Fire warning when SoC exceeds this (overcharge / float damage risk)">
+              <NumberInput
+                value={draft.pvAlarmSocHigh}
+                onChange={(v) => update("pvAlarmSocHigh", v)}
+                min={80}
+                max={100}
+                step={1}
+                unit="%"
+              />
+            </FieldRow>
+            <FieldRow label="Cell delta warn" hint="Fire warning when REC BMS cell spread exceeds this value">
+              <NumberInput
+                value={draft.pvAlarmCellDelta}
+                onChange={(v) => update("pvAlarmCellDelta", v)}
+                min={10}
+                max={200}
+                step={5}
+                unit="mV"
+              />
+            </FieldRow>
+            <FieldRow label="Load limit warn" hint="Fire warning when Quattro AC output exceeds this wattage">
+              <NumberInput
+                value={draft.pvAlarmLoadWatts}
+                onChange={(v) => update("pvAlarmLoadWatts", v)}
+                min={500}
+                max={8000}
+                step={100}
+                unit="W"
+              />
+            </FieldRow>
+            <FieldRow label="Battery temp alarm" hint="Fire alarm when battery temperature exceeds this value">
+              <NumberInput
+                value={draft.pvAlarmTempHigh}
+                onChange={(v) => update("pvAlarmTempHigh", v)}
+                min={30}
+                max={60}
+                step={1}
+                unit="°C"
+              />
+            </FieldRow>
           </Section>
 
           {/* ── Display ── */}

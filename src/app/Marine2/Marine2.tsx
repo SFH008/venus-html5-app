@@ -16,6 +16,7 @@ import WeatherForecastView from "./components/views/WeatherForecastView"
 import WatermakerView from "./components/views/WatermakerView"
 import SystemOverviewView from "./components/views/SystemOverviewView"
 import SettingsView from "./components/views/SettingsView"
+import PowerView from "./components/views/PowerView"
 import MainLayout from "./components/ui/MainLayout"
 
 export const Marine2 = observer((props: AppProps) => {
@@ -63,6 +64,12 @@ export const Marine2 = observer((props: AppProps) => {
         return (
           <MainLayout>
             <WeatherForecastView />
+          </MainLayout>
+        )
+      case AppViews.POWER_VIEW:
+        return (
+          <MainLayout>
+            <PowerView />
           </MainLayout>
         )
       case AppViews.WATERMAKER_VIEW:

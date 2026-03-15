@@ -17,13 +17,14 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
-import { getConfig, nrAlarmUrl } from "../../config/AppConfig"
+import { getConfig } from "../../config/AppConfig"
 
 // ─── CONFIG — loaded from AppConfig / SettingsView ───────────────────────────
 const _cfg = getConfig()
 const SIGNALK_HOST = _cfg.signalkHost
 const SIGNALK_PORT = _cfg.signalkPort
-const NR_ALARM_URL = nrAlarmUrl(_cfg)
+const SK_API_URL = `http://${SIGNALK_HOST}:${SIGNALK_PORT}/signalk/v1/api/vessels/self`
+const NOTIF_PREFIX = _cfg.notifPrefix // e.g. "notifications.marine2"
 
 // ─── THRESHOLDS ───────────────────────────────────────────────────────────────
 const T = {
@@ -149,42 +150,71 @@ function twoLevelAlarm(
   return { ...current, clearSince }
 }
 
-// ─── AUDIO / NODE-RED ─────────────────────────────────────────────────────────
-const lastAudioFired = new Map<string, number>()
-// Zone determines which speaker(s) the alarm is sent to.
-// "helm"  = cockpit / helm station speaker only
-// "cabin" = below-deck speaker only
-// "all"   = both helm and cabin
-const ALARM_ZONES: Record<string, string> = {
-  "sustained-wind": "all",
-  "wind-shift": "helm",
-  "veer-back": "helm",
-  reversal: "all",
-  "tws-trend": "helm",
-  "dir-rate": "helm",
-  "baro-combined": "all",
-  heel: "all",
-  slam: "helm",
-  overpowered: "all",
+// ─── SIGNALK NOTIFICATIONS ────────────────────────────────────────────────────
+// Alarms are published to the SignalK notifications tree via REST PUT.
+// Path: /signalk/v1/api/vessels/self/{notifPrefix}/{id}
+//   e.g. /signalk/v1/api/vessels/self/notifications/marine2/overpowered
+//
+// Node-RED subscribes to `notifications.marine2.*` and routes by:
+//   value.state  → normal | alert | warn | alarm | emergency
+//   value.zone   → helm | cabin | all  (extension field for speaker routing)
+//
+// Clearing an alarm sets state to "normal" — Node-RED stops repeating.
+
+const lastNotifFired = new Map<string, number>()
+
+interface AlarmMeta {
+  zone: string
+  state: string
+}
+const ALARM_META: Record<string, AlarmMeta> = {
+  "sustained-wind": { zone: "all", state: "alarm" },
+  "wind-shift": { zone: "helm", state: "warn" },
+  "veer-back": { zone: "helm", state: "warn" },
+  reversal: { zone: "all", state: "alarm" },
+  "tws-trend": { zone: "helm", state: "warn" },
+  "dir-rate": { zone: "helm", state: "warn" },
+  "baro-combined": { zone: "all", state: "alarm" },
+  heel: { zone: "all", state: "alarm" },
+  slam: { zone: "helm", state: "warn" },
+  overpowered: { zone: "all", state: "emergency" },
+}
+
+function skNotifPut(id: string, value: object) {
+  // Convert dot-path prefix to slash-path for REST API
+  // "notifications.marine2" → "notifications/marine2"
+  const path = NOTIF_PREFIX.split(".").join("/")
+  fetch(`${SK_API_URL}/${path}/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ value }),
+  }).catch(() => {})
 }
 
 function fireAudio(id: string, message: string) {
-  const last = lastAudioFired.get(id) ?? 0
+  const last = lastNotifFired.get(id) ?? 0
   if (Date.now() - last < 60000) return // max once per minute per alarm
-  lastAudioFired.set(id, Date.now())
-  const zone = ALARM_ZONES[id] ?? "helm"
-  fetch(NR_ALARM_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, message, severity: "alarm", zone }),
-  }).catch(() => {})
+  lastNotifFired.set(id, Date.now())
+  const meta = ALARM_META[id] ?? { zone: "helm", state: "warn" }
+  skNotifPut(id, {
+    state: meta.state,
+    method: ["sound", "visual"],
+    message,
+    zone: meta.zone,
+    source: "marine2.weather",
+    timestamp: new Date().toISOString(),
+  })
 }
+
 function clearAudio(id: string) {
-  fetch(`${NR_ALARM_URL}/clear`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id }),
-  }).catch(() => {})
+  skNotifPut(id, {
+    state: "normal",
+    method: [],
+    message: "",
+    zone: "none",
+    source: "marine2.weather",
+    timestamp: new Date().toISOString(),
+  })
 }
 
 // ─── SK PATHS ─────────────────────────────────────────────────────────────────

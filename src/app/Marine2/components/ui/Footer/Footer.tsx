@@ -8,17 +8,13 @@ import SwitchingPane from "../../views/SwitchingPane"
 
 // ── Nav items — add/remove/reorder here freely ─────────────────────────────
 const NAV_ITEMS: { view: AppViews; icon: string; label: string }[] = [
-  { view: AppViews.ROOT, icon: "🏠", label: "Home" },
-  { view: AppViews.SYSTEM_OVERVIEW, icon: "⚡", label: "System" },
   { view: AppViews.BOAT_OVERVIEW, icon: "🛥", label: "Vessel" },
-  { view: AppViews.SWITCH_VIEW, icon: "🔌", label: "Switching" },
-  { view: AppViews.WEATHER_VIEW, icon: "🌤", label: "Weather" },
-  { view: AppViews.WEATHER_FORECAST, icon: "📅", label: "Forecast" },
+  { view: AppViews.SWITCH_VIEW, icon: "🔌", label: "Switches" },
+  { view: AppViews.POWER_VIEW, icon: "⚡", label: "Power" },
   { view: AppViews.WATERMAKER_VIEW, icon: "🌊", label: "Water" },
-  { view: AppViews.CERBO_OVERVIEW, icon: "⚡", label: "Cerbo" },
-  { view: AppViews.BOX_ENERGY_OVERVIEW, icon: "🔋", label: "Energy" },
-  { view: AppViews.BOX_TANKS, icon: "💧", label: "Tanks" },
-  { view: AppViews.SETTINGS, icon: "⚙", label: "Settings" },
+  { view: AppViews.WEATHER_VIEW, icon: "🌬", label: "Weather" },
+  { view: AppViews.WEATHER_FORECAST, icon: "📈", label: "Forecast" },
+  { view: AppViews.SETTINGS, icon: "⚙️", label: "Settings" },
 ]
 
 const Footer = ({ pageSelectorProps }: Props) => {
