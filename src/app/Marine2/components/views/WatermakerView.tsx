@@ -55,6 +55,7 @@ interface BOMState {
   flush_result: string
   pickle_result: string
   depickle_result: string
+  pickled_on?: number // unix timestamp seconds
   motor_temperature: number // °C
   water_temperature: number // °C
   product_flowrate: number // LPH
@@ -105,6 +106,7 @@ const PATH_MAP: Array<[string, keyof BOMState, Converter | null]> = [
   ["flush_result", "flush_result", null],
   ["pickle_result", "pickle_result", null],
   ["depickle_result", "depickle_result", null],
+  ["pickled_on", "pickled_on", null],
   ["motor_temperature", "motor_temperature", K_TO_C],
   ["water_temperature", "water_temperature", K_TO_C],
   ["product_flowrate", "product_flowrate", M3S_TO_LPH],
@@ -460,6 +462,7 @@ const styles = `
     gap: 6px;
     flex: 1;
     min-height: 0;
+    max-height: 160px;
   }
 
   /* Info panel — 50% */
@@ -474,6 +477,7 @@ const styles = `
     flex-direction: column;
     gap: 3px;
     min-width: 0;
+    overflow: hidden;
   }
 
   .wm-info-title {
@@ -607,13 +611,13 @@ const styles = `
     background: #0a1218;
     border: 1px solid #152030;
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 4px 8px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
-    min-height: 100px;
+    gap: 2px;
+    min-height: 50px;
   }
 
   .wm-stat-tile .wm-stat-key {
@@ -1190,12 +1194,43 @@ function ArcGauge({
 }
 
 // ─── RESULT BADGE ─────────────────────────────────────────────────────────────
+// ─── RESULT TEXT MAP (mirrors brineomatic.js resultText) ─────────────────────
+const RESULT_TEXT: Record<string, string> = {
+  SUCCESS: "Success",
+  SUCCESS_TIME: "Success — time OK",
+  SUCCESS_VOLUME: "Success — volume OK",
+  SUCCESS_TANK_LEVEL: "Success — tank full",
+  SUCCESS_SALINITY: "Success — salinity OK",
+  USER_STOP: "Stopped by user",
+  ERR_FILTER_PRESSURE_TIMEOUT: "Filter pressure timeout",
+  ERR_FILTER_PRESSURE_LOW: "Filter pressure low",
+  ERR_FILTER_PRESSURE_HIGH: "Filter pressure high",
+  ERR_MEMBRANE_PRESSURE_TIMEOUT: "Membrane pressure timeout",
+  ERR_MEMBRANE_PRESSURE_LOW: "Membrane pressure low",
+  ERR_MEMBRANE_PRESSURE_HIGH: "Membrane pressure high",
+  ERR_PRODUCT_FLOWRATE_TIMEOUT: "Product flowrate timeout",
+  ERR_PRODUCT_FLOWRATE_LOW: "Product flowrate low",
+  ERR_PRODUCT_FLOWRATE_HIGH: "Product flowrate high",
+  ERR_FLUSH_FLOWRATE_LOW: "Flush flowrate low",
+  ERR_FLUSH_FILTER_PRESSURE_LOW: "Flush — filter pressure low",
+  ERR_FLUSH_VALVE_ON: "Flush valve not closed",
+  ERR_FLUSH_TIMEOUT: "Flush timed out",
+  ERR_BRINE_FLOWRATE_LOW: "Brine flowrate low",
+  ERR_TOTAL_FLOWRATE_LOW: "Total flowrate low",
+  ERR_DIVERTER_VALVE_OPEN: "Diverter valve not closing",
+  ERR_PRODUCT_SALINITY_TIMEOUT: "Product salinity timeout",
+  ERR_PRODUCT_SALINITY_HIGH: "Product salinity high",
+  ERR_PRODUCTION_TIMEOUT: "Production timeout",
+  ERR_MOTOR_TEMPERATURE_HIGH: "Motor temperature high",
+}
+
 function ResultBadge({ result }: { result: string }) {
   if (!result || result === "STARTUP" || result === "UNKNOWN") return null
   const isSuccess = result.startsWith("SUCCESS")
   const isUser = result === "USER_STOP"
   const cls = isSuccess ? "success" : isUser ? "neutral" : "error"
-  return <span className={`wm-result ${cls}`}>{result.replace(/_/g, " ")}</span>
+  const label = RESULT_TEXT[result] ?? result.replace(/_/g, " ")
+  return <span className={`wm-result ${cls}`}>{label}</span>
 }
 
 // ─── PROGRESS BAR ─────────────────────────────────────────────────────────────
@@ -1670,6 +1705,35 @@ export const WatermakerView: React.FC = () => {
                   <ResultBadge result={state.flush_result} />
                 </div>
               )}
+              {state?.pickle_result && state.pickle_result !== "STARTUP" && (
+                <div className="wm-info-row">
+                  <span className="wm-info-key">Pickle Result</span>
+                  <ResultBadge result={state.pickle_result} />
+                </div>
+              )}
+              {state?.depickle_result && state.depickle_result !== "STARTUP" && (
+                <div className="wm-info-row">
+                  <span className="wm-info-key">Depickle Result</span>
+                  <ResultBadge result={state.depickle_result} />
+                </div>
+              )}
+              {isPickled && (state?.pickled_on ?? 0) > 0 && (
+                <div className="wm-info-row">
+                  <span className="wm-info-key">Pickled Since</span>
+                  <span className="wm-info-val" style={{ color: "#a78bfa" }}>
+                    {(() => {
+                      const d = new Date((state?.pickled_on ?? 0) * 1000)
+                      const dateStr = d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+                      const now = Math.floor(Date.now() / 1000)
+                      const diff = now - (state?.pickled_on ?? 0)
+                      const days = Math.floor(diff / 86400)
+                      const hrs = Math.floor((diff % 86400) / 3600)
+                      const ago = days > 0 ? `${days}d ${hrs}h ago` : `${hrs}h ago`
+                      return `${dateStr} (${ago})`
+                    })()}
+                  </span>
+                </div>
+              )}
 
               {/* Timers */}
               {(isRunning || isStopping || isIdle) && (state?.runtime_elapsed ?? 0) > 0 && (
@@ -1688,7 +1752,7 @@ export const WatermakerView: React.FC = () => {
               )}
               {isIdle && (state?.next_flush_countdown ?? 0) > 0 && (
                 <div className="wm-info-row">
-                  <span className="wm-info-key">Next Autoflush</span>
+                  <span className="wm-info-key">Autoflush In</span>
                   <span className="wm-info-val" style={{ color: "#38bdf8" }}>
                     {formatDuration(state?.next_flush_countdown ?? 0)}
                   </span>
