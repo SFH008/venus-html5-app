@@ -4,40 +4,25 @@
  * Layout (1280×800):
  *   Row 1 — Sail Plan Monitor | Wind Shift Monitor | Squall Risk
  *   Row 2 — Trend Alarms      | Passage Safety     | Prognosis
- *
- * SK Paths:
- *   environment.wind.speedTrue / angleTrue / directionTrue / directionMagnetic
- *   environment.wind.speedApparent / angleApparent
- *   environment.outside.pressure
- *   navigation.attitude   (object: { yaw, pitch, roll } in radians)
- *   navigation.headingTrue
- *   environment.venus.29.accelerationX/Y/Z  (m/s²)
- *   environment.outside.pressure.prediction.*
- *   environment.outside.pressure.system
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
 import { getConfig } from "../../config/AppConfig"
 
-// ─── CONFIG — loaded from AppConfig / SettingsView ───────────────────────────
 const _cfg = getConfig()
 const SIGNALK_HOST = _cfg.signalkHost
 const SIGNALK_PORT = _cfg.signalkPort
 const SK_API_URL = `http://${SIGNALK_HOST}:${SIGNALK_PORT}/signalk/v1/api/vessels/self`
-const NOTIF_PREFIX = _cfg.notifPrefix // e.g. "notifications.marine2"
+const NOTIF_PREFIX = _cfg.notifPrefix
 
-// ─── THRESHOLDS ───────────────────────────────────────────────────────────────
 const T = {
-  // Sail plan
   reef1Kn: 20,
   reef1WatchKn: 18,
   reef2Kn: 25,
   reef2WatchKn: 23,
   reef3Kn: 30,
   stormJibKn: 40,
-  sustainedMins: 5, // minutes for sustained wind alarm
-
-  // Wind shift
+  sustainedMins: 5,
   shiftDeg: 25,
   shiftMins: 3,
   veerWatchDpm: 3,
@@ -45,43 +30,33 @@ const T = {
   veerMins: 5,
   reversalDeg: 150,
   reversalSecs: 90,
-
-  // Trend alarms
   twsWatchSlope: 0.3,
   twsAlarmSlope: 0.8,
   twsSlopeMins: 3,
   dirRateWatch: 5,
   dirRateAlarm: 15,
   pressWatchDrop: 2,
-  pressAlarmDrop: 3, // hPa / 3h
-
-  // Passage safety
+  pressAlarmDrop: 3,
   heelWatchDeg: 25,
   heelAlarmDeg: 35,
   heelWatchSecs: 30,
   heelAlarmSecs: 15,
   slamMs2: 8,
-  slamsPerHour: 10, // m/s² deviation, count/hr
+  slamsPerHour: 10,
   overpowerKn: 25,
   overpowerHeel: 25,
   overpowerKnFallback: 32,
 }
 
-// ─── CONVERSIONS ─────────────────────────────────────────────────────────────
 const msToKn = (v: number) => Math.round(v * 1.94384 * 10) / 10
 const radToDeg = (v: number) => Math.round(((v * 180) / Math.PI + 360) % 360)
-const _radToSigned = (v: number) => {
-  const d = (v * 180) / Math.PI
-  return Math.round(((d + 180) % 360) - 180)
-}
 const paToHpa = (v: number) => Math.round((v > 50000 ? v / 100 : v) * 10) / 10
 const toRad = (d: number) => (d * Math.PI) / 180
 const cirDiff = (a: number, b: number) => {
   let d = ((a - b + 540) % 360) - 180
   return d
-} // signed circular difference
+}
 
-// Circular mean of an array of degrees
 function circMean(degs: number[]): number {
   if (!degs.length) return 0
   const s = degs.reduce((a, d) => a + Math.sin(toRad(d)), 0)
@@ -89,7 +64,6 @@ function circMean(degs: number[]): number {
   return ((Math.atan2(s / degs.length, c / degs.length) * 180) / Math.PI + 360) % 360
 }
 
-// Linear regression slope (y per x unit)
 function linSlope(pts: { x: number; y: number }[]): number {
   if (pts.length < 2) return 0
   const n = pts.length
@@ -100,7 +74,6 @@ function linSlope(pts: { x: number; y: number }[]): number {
   return den === 0 ? 0 : num / den
 }
 
-// ─── ALARM STATE MACHINE ─────────────────────────────────────────────────────
 type AlarmLevel = "OK" | "WATCH" | "ALARM"
 interface AlarmState {
   level: AlarmLevel
@@ -116,7 +89,7 @@ function tickAlarm(current: AlarmState, triggered: boolean, thresholdMs: number,
       if (now - since >= thresholdMs) return { level: "ALARM", since, clearSince: 0 }
       return { ...current, since, clearSince: 0 }
     }
-    return { ...current, clearSince: 0 } // stay in WATCH/ALARM
+    return { ...current, clearSince: 0 }
   } else {
     if (current.level === "OK") return current
     const clearSince = current.clearSince || now
@@ -150,19 +123,7 @@ function twoLevelAlarm(
   return { ...current, clearSince }
 }
 
-// ─── SIGNALK NOTIFICATIONS ────────────────────────────────────────────────────
-// Alarms are published to the SignalK notifications tree via REST PUT.
-// Path: /signalk/v1/api/vessels/self/{notifPrefix}/{id}
-//   e.g. /signalk/v1/api/vessels/self/notifications/marine2/overpowered
-//
-// Node-RED subscribes to `notifications.marine2.*` and routes by:
-//   value.state  → normal | alert | warn | alarm | emergency
-//   value.zone   → helm | cabin | all  (extension field for speaker routing)
-//
-// Clearing an alarm sets state to "normal" — Node-RED stops repeating.
-
 const lastNotifFired = new Map<string, number>()
-
 interface AlarmMeta {
   zone: string
   state: string
@@ -181,8 +142,6 @@ const ALARM_META: Record<string, AlarmMeta> = {
 }
 
 function skNotifPut(id: string, value: object) {
-  // Convert dot-path prefix to slash-path for REST API
-  // "notifications.marine2" → "notifications/marine2"
   const path = NOTIF_PREFIX.split(".").join("/")
   fetch(`${SK_API_URL}/${path}/${id}`, {
     method: "PUT",
@@ -193,7 +152,7 @@ function skNotifPut(id: string, value: object) {
 
 function fireAudio(id: string, message: string) {
   const last = lastNotifFired.get(id) ?? 0
-  if (Date.now() - last < 60000) return // max once per minute per alarm
+  if (Date.now() - last < 60000) return
   lastNotifFired.set(id, Date.now())
   const meta = ALARM_META[id] ?? { zone: "helm", state: "warn" }
   skNotifPut(id, {
@@ -217,7 +176,6 @@ function clearAudio(id: string) {
   })
 }
 
-// ─── SK PATHS ─────────────────────────────────────────────────────────────────
 const SK_PATHS = [
   "environment.wind.speedTrue",
   "environment.wind.angleTrue",
@@ -238,7 +196,6 @@ const SK_PATHS = [
   "environment.outside.pressure.prediction.quadrant",
 ]
 
-// ─── TYPES ────────────────────────────────────────────────────────────────────
 interface Prognosis {
   season: string | null
   frontPrognose: string | null
@@ -266,7 +223,6 @@ interface AccelSample {
   t: number
 }
 
-// ─── HISTORY API ──────────────────────────────────────────────────────────────
 async function fetchSkHistory(path: string, durationMs: number): Promise<[string, number][]> {
   const to = new Date().toISOString()
   const from = new Date(Date.now() - durationMs).toISOString()
@@ -282,7 +238,7 @@ async function fetchSkHistory(path: string, durationMs: number): Promise<[string
 }
 
 async function bootPressureHistory(): Promise<PressureSample[]> {
-  const data = await fetchSkHistory("environment.outside.pressure", 3 * 3600 * 1000) // 3h
+  const data = await fetchSkHistory("environment.outside.pressure", 3 * 3600 * 1000)
   const byMin = new Map<number, number[]>()
   for (const [ts, val] of data) {
     const k = Math.floor(new Date(ts).getTime() / 60000)
@@ -297,7 +253,6 @@ async function bootPressureHistory(): Promise<PressureSample[]> {
     }))
 }
 
-// ─── SQUALL COLOURS ───────────────────────────────────────────────────────────
 const SQUALL_ARC = [
   { from: 0, to: 0.3, color: "#22c55e" },
   { from: 0.3, to: 0.6, color: "#f59e0b" },
@@ -305,7 +260,6 @@ const SQUALL_ARC = [
   { from: 0.8, to: 1.0, color: "#ef4444" },
 ]
 
-// ─── SHARED UI COMPONENTS ────────────────────────────────────────────────────
 const MONO = "'Share Tech Mono', monospace"
 const C = {
   bg: "#000509",
@@ -366,7 +320,7 @@ const Panel = ({
         background: C.panel,
         border: `1px solid ${borderColor}`,
         borderRadius: 10,
-        padding: "10px 14px",
+        padding: "8px 12px",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -376,12 +330,12 @@ const Panel = ({
     >
       <div
         style={{
-          fontSize: 10,
+          fontSize: 11,
           color: C.accent,
-          letterSpacing: "0.3em",
+          letterSpacing: "0.28em",
           textTransform: "uppercase",
-          marginBottom: 8,
-          paddingBottom: 6,
+          marginBottom: 6,
+          paddingBottom: 5,
           borderBottom: "1px solid rgba(0,210,255,0.08)",
           flexShrink: 0,
         }}
@@ -393,7 +347,7 @@ const Panel = ({
   )
 }
 
-// Alarm row — used in all boxes
+// ── AlarmRow — increased value font, tighter padding ─────────────────────────
 const AlarmRow = ({
   label,
   level,
@@ -412,11 +366,12 @@ const AlarmRow = ({
       display: "flex",
       alignItems: "center",
       gap: 8,
-      padding: "6px 8px",
+      padding: "5px 8px",
       marginBottom: 4,
       borderRadius: 6,
       background: LEVEL_BG[level],
       border: `1px solid ${LEVEL_BORDER[level]}`,
+      flex: 1,
     }}
   >
     <div
@@ -430,8 +385,8 @@ const AlarmRow = ({
       }}
     />
     <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ fontSize: 11, color: C.dim, letterSpacing: "0.12em", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: LEVEL_COLOR[level], fontFamily: MONO }}>{value}</div>
+      <div style={{ fontSize: 12, color: C.dim, letterSpacing: "0.12em", textTransform: "uppercase" }}>{label}</div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: LEVEL_COLOR[level], fontFamily: MONO }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: C.faint }}>{sub}</div>}
     </div>
     {spark && spark.length > 1 && (
@@ -464,7 +419,7 @@ const AlarmRow = ({
   </div>
 )
 
-// ─── TOP LEFT: SAIL PLAN MONITOR ─────────────────────────────────────────────
+// ── Sail Plan ─────────────────────────────────────────────────────────────────
 function getSailPlan(tws: number | null): { state: string; color: string; next: number | null } {
   if (tws === null) return { state: "NO DATA", color: C.faint, next: null }
   if (tws < T.reef1WatchKn) return { state: "FULL SAIL", color: C.ok, next: T.reef1WatchKn }
@@ -486,7 +441,6 @@ const SailPlanMonitor = ({
   sustainedAlarm: AlarmState
 }) => {
   const plan = getSailPlan(tws)
-  // Reef band thresholds for the bar
   const bands = [
     { from: 0, to: T.reef1Kn, color: C.ok, label: "Full sail" },
     { from: T.reef1Kn, to: T.reef2Kn, color: "#fb923c", label: "1st reef" },
@@ -495,10 +449,8 @@ const SailPlanMonitor = ({
     { from: T.stormJibKn, to: 55, color: "#450a0a", label: "Storm jib" },
   ]
   const maxKn = 55
-  const barH = 130
+  const barH = 110
   const barW = 16
-
-  // Sustained alarm progress
   const sustainedTarget = T.sustainedMins * 60 * 1000
   const elapsed = sustainedAlarm.since ? Math.min(Date.now() - sustainedAlarm.since, sustainedTarget) : 0
   const sustainedPct = sustainedAlarm.since ? elapsed / sustainedTarget : 0
@@ -507,7 +459,7 @@ const SailPlanMonitor = ({
 
   return (
     <div style={{ display: "flex", gap: 10, height: "100%" }}>
-      {/* Threshold bar */}
+      {/* Threshold bar — reduced height */}
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flexShrink: 0 }}>
         <div style={{ fontSize: 9, color: C.faint, letterSpacing: "0.1em" }}>kn</div>
         <svg width={barW + 40} height={barH}>
@@ -523,7 +475,6 @@ const SailPlanMonitor = ({
               </g>
             )
           })}
-          {/* Current TWS indicator */}
           {tws !== null && (
             <g>
               <line
@@ -542,27 +493,23 @@ const SailPlanMonitor = ({
           )}
         </svg>
       </div>
-
       {/* Main info */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
-        {/* Sail state */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
         <div
           style={{
             textAlign: "center",
-            padding: "8px 4px",
+            padding: "7px 4px",
             borderRadius: 8,
             background: `${plan.color}18`,
             border: `1px solid ${plan.color}55`,
           }}
         >
           <div style={{ fontSize: 9, color: C.dim, letterSpacing: "0.2em" }}>SAIL PLAN</div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: plan.color, fontFamily: MONO, letterSpacing: "0.05em" }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: plan.color, fontFamily: MONO, letterSpacing: "0.05em" }}>
             {plan.state}
           </div>
-          {plan.next && <div style={{ fontSize: 10, color: C.faint }}>next threshold: {plan.next} kn</div>}
+          {plan.next && <div style={{ fontSize: 10, color: C.faint }}>next: {plan.next} kn</div>}
         </div>
-
-        {/* TWS */}
         <div
           style={{
             display: "flex",
@@ -573,29 +520,25 @@ const SailPlanMonitor = ({
             borderRadius: 6,
           }}
         >
-          <span style={{ fontSize: 10, color: C.dim }}>TWS</span>
-          <span style={{ fontSize: 24, fontWeight: 700, color: "#e8f8ff", fontFamily: MONO }}>
+          <span style={{ fontSize: 11, color: C.dim }}>TWS</span>
+          <span style={{ fontSize: 26, fontWeight: 700, color: "#e8f8ff", fontFamily: MONO }}>
             {tws !== null ? tws.toFixed(1) : "—"}
           </span>
-          <span style={{ fontSize: 11, color: C.faint }}>kn</span>
+          <span style={{ fontSize: 12, color: C.faint }}>kn</span>
         </div>
-
-        {/* 2-min max */}
         {twsBuf.length > 0 && (
           <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 6px" }}>
-            <span style={{ fontSize: 10, color: C.faint }}>2 min max</span>
-            <span style={{ fontSize: 13, color: C.watch, fontFamily: MONO }}>
+            <span style={{ fontSize: 11, color: C.faint }}>2 min max</span>
+            <span style={{ fontSize: 14, color: C.watch, fontFamily: MONO }}>
               {Math.max(...twsBuf.slice(-24)).toFixed(1)} kn
             </span>
           </div>
         )}
-
-        {/* Sustained alarm */}
         <div style={{ marginTop: "auto" }}>
           <div
             style={{ fontSize: 9, color: C.faint, marginBottom: 3, display: "flex", justifyContent: "space-between" }}
           >
-            <span>SUSTAINED {T.sustainedMins}MIN ALARM</span>
+            <span>SUSTAINED {T.sustainedMins}MIN</span>
             {sustainedAlarm.since > 0 && (
               <span style={{ color: sustainedAlarm.level === "ALARM" ? C.alarm : C.watch }}>
                 {elapsedMins}:{elapsedSecs.toString().padStart(2, "0")} / {T.sustainedMins}:00
@@ -617,7 +560,7 @@ const SailPlanMonitor = ({
           <div
             style={{
               marginTop: 3,
-              fontSize: 10,
+              fontSize: 11,
               color: LEVEL_COLOR[sustainedAlarm.level],
               textAlign: "right",
               fontFamily: MONO,
@@ -631,7 +574,7 @@ const SailPlanMonitor = ({
   )
 }
 
-// ─── TOP CENTRE: WIND SHIFT MONITOR ──────────────────────────────────────────
+// ── Wind Shift Monitor — compass reduced to 120px, values enlarged ────────────
 const WindShiftMonitor = ({
   twdBuf,
   shiftAlarm,
@@ -645,12 +588,10 @@ const WindShiftMonitor = ({
   reversalAlarm: AlarmState
   trend: { deg: number; label: string; slope: number }
 }) => {
-  const CX = 70
-  const CY = 70
-  const R = 56
-  const SIZE = 140
-
-  // Trail of last 20 direction samples as dots
+  const CX = 60
+  const CY = 60
+  const R = 48
+  const SIZE = 120
   const recentDirs = twdBuf.slice(-20)
   const currentDir = recentDirs[recentDirs.length - 1] ?? 0
   const meanDir = circMean(recentDirs)
@@ -658,12 +599,9 @@ const WindShiftMonitor = ({
 
   return (
     <div style={{ display: "flex", gap: 8, height: "100%" }}>
-      {/* Compass rose */}
       <div style={{ flexShrink: 0 }}>
         <svg width={SIZE} height={SIZE}>
-          {/* Background */}
           <circle cx={CX} cy={CY} r={R} fill="rgba(0,4,12,0.8)" stroke="rgba(0,210,255,0.12)" strokeWidth={1} />
-          {/* Cardinal labels */}
           {[
             ["N", 0],
             ["E", 90],
@@ -674,8 +612,8 @@ const WindShiftMonitor = ({
             return (
               <text
                 key={l as string}
-                x={CX + (R - 10) * Math.cos(a)}
-                y={CY + (R - 10) * Math.sin(a)}
+                x={CX + (R - 9) * Math.cos(a)}
+                y={CY + (R - 9) * Math.sin(a)}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fontSize={9}
@@ -686,11 +624,10 @@ const WindShiftMonitor = ({
               </text>
             )
           })}
-          {/* Direction history trail */}
           {recentDirs.map((d, i) => {
             const a = toRad(d - 90)
             const opacity = 0.15 + (i / recentDirs.length) * 0.6
-            const r2 = R - 20
+            const r2 = R - 16
             return (
               <circle
                 key={i}
@@ -702,11 +639,10 @@ const WindShiftMonitor = ({
               />
             )
           })}
-          {/* Mean direction */}
           {recentDirs.length > 0 &&
             (() => {
               const a = toRad(meanDir - 90)
-              const r2 = R - 22
+              const r2 = R - 18
               return (
                 <line
                   x1={CX}
@@ -720,10 +656,9 @@ const WindShiftMonitor = ({
                 />
               )
             })()}
-          {/* Current direction arrow */}
           {(() => {
             const a = toRad(currentDir - 90)
-            const r2 = R - 14
+            const r2 = R - 12
             return (
               <>
                 <line
@@ -739,21 +674,17 @@ const WindShiftMonitor = ({
               </>
             )
           })()}
-          {/* Current value pill */}
-          <text x={CX} y={CY + R + 10} textAnchor="middle" fontSize={10} fill={C.dim} fontFamily={MONO}>
+          <text x={CX} y={CY + R + 9} textAnchor="middle" fontSize={10} fill={C.dim} fontFamily={MONO}>
             {Math.round(currentDir)}°
           </text>
         </svg>
       </div>
-
-      {/* Alarms */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-        {/* Shift magnitude */}
         <div style={{ padding: "4px 6px", background: "rgba(0,0,0,0.3)", borderRadius: 6, marginBottom: 2 }}>
           <div style={{ fontSize: 9, color: C.faint }}>SHIFT FROM 5-MIN MEAN</div>
           <div
             style={{
-              fontSize: 20,
+              fontSize: 22,
               fontWeight: 700,
               color: shiftAlarm.level !== "OK" ? LEVEL_COLOR[shiftAlarm.level] : C.text,
               fontFamily: MONO,
@@ -762,12 +693,11 @@ const WindShiftMonitor = ({
             {shiftMag !== null ? `${shiftMag > 0 ? "+" : ""}${shiftMag}°` : "—"}
           </div>
         </div>
-        {/* Trend */}
         <div style={{ padding: "4px 6px", background: "rgba(0,0,0,0.3)", borderRadius: 6, marginBottom: 2 }}>
           <div style={{ fontSize: 9, color: C.faint }}>TREND</div>
           <div
             style={{
-              fontSize: 13,
+              fontSize: 15,
               fontWeight: 700,
               color: veerAlarm.level !== "OK" ? LEVEL_COLOR[veerAlarm.level] : C.dim,
               fontFamily: MONO,
@@ -799,14 +729,13 @@ const WindShiftMonitor = ({
   )
 }
 
-// ─── TOP RIGHT: SQUALL RISK (preserved from v3) ───────────────────────────────
+// ── Squall Risk ───────────────────────────────────────────────────────────────
 const arcPath = (cx: number, cy: number, r: number, startDeg: number, endDeg: number) => {
   const s = toRad(startDeg)
   const e = toRad(endDeg)
   const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0
   return `M ${cx + r * Math.cos(s)} ${cy + r * Math.sin(s)} A ${r} ${r} 0 ${large} 1 ${cx + r * Math.cos(e)} ${cy + r * Math.sin(e)}`
 }
-
 const ARC_START = -210
 const ARC_END = 30
 const ARC_SPAN = ARC_END - ARC_START
@@ -819,10 +748,10 @@ interface SquallState {
 }
 
 const SquallArcGauge = ({ squall }: { squall: SquallState }) => {
-  const SIZE = 160
+  const SIZE = 150
   const CX = SIZE / 2
-  const CY = SIZE / 2 + 10
-  const R = 62
+  const CY = SIZE / 2 + 8
+  const R = 58
   const RISK_COLOR: Record<string, string> = { LOW: C.ok, MODERATE: C.watch, HIGH: "#f97316", IMMINENT: C.alarm }
   const riskColor = RISK_COLOR[squall.risk] ?? C.ok
   const needleDeg = ARC_START + squall.score * ARC_SPAN
@@ -863,18 +792,18 @@ const SquallArcGauge = ({ squall }: { squall: SquallState }) => {
         <text x={CX} y={CY - 18} textAnchor="middle" fontSize={18} fontWeight="700" fill={riskColor} fontFamily={MONO}>
           {squall.risk}
         </text>
-        <text x={CX} y={CY - 4} textAnchor="middle" fontSize={11} fill={C.dim} fontFamily={MONO}>
+        <text x={CX} y={CY - 4} textAnchor="middle" fontSize={13} fill={C.dim} fontFamily={MONO}>
           {Math.round(squall.score * 100)}%
         </text>
       </svg>
-      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: MONO }}>
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 3 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontFamily: MONO }}>
           <span style={{ color: C.faint }}>ΔP/h</span>
           <span style={{ color: squall.pressureSlope !== null && squall.pressureSlope < -1 ? C.alarm : C.dim }}>
             {squall.pressureSlope !== null ? `${squall.pressureSlope > 0 ? "+" : ""}${squall.pressureSlope}` : "—"} hPa
           </span>
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: MONO }}>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontFamily: MONO }}>
           <span style={{ color: C.faint }}>Dir Var</span>
           <span style={{ color: squall.windVariation !== null && squall.windVariation > 10 ? C.watch : C.dim }}>
             {squall.windVariation !== null ? `${squall.windVariation}°` : "—"}
@@ -885,7 +814,7 @@ const SquallArcGauge = ({ squall }: { squall: SquallState }) => {
   )
 }
 
-// ─── BOTTOM LEFT: TREND ALARMS ───────────────────────────────────────────────
+// ── Trend Alarms ──────────────────────────────────────────────────────────────
 const TrendAlarms = ({
   twsAlarm,
   dirAlarm,
@@ -907,7 +836,7 @@ const TrendAlarms = ({
   dirSpark: number[]
   pressSpark: number[]
 }) => (
-  <div style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%" }}>
+  <div style={{ display: "flex", flexDirection: "column", gap: 4, height: "100%" }}>
     <AlarmRow
       label="Wind Speed Trend"
       level={twsAlarm.level}
@@ -938,7 +867,7 @@ const TrendAlarms = ({
   </div>
 )
 
-// ─── BOTTOM CENTRE: PASSAGE SAFETY ───────────────────────────────────────────
+// ── Passage Safety ────────────────────────────────────────────────────────────
 const PassageSafety = ({
   heelAlarm,
   slamAlarm,
@@ -956,10 +885,8 @@ const PassageSafety = ({
 }) => {
   const rollDeg = roll !== null ? Math.round(Math.abs((roll * 180) / Math.PI) * 10) / 10 : null
   const heelSide = roll !== null ? (roll > 0 ? "SB" : "PORT") : null
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%" }}>
-      {/* Heel */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, height: "100%" }}>
       <AlarmRow
         label="Heel Angle"
         level={heelAlarm.level}
@@ -968,14 +895,12 @@ const PassageSafety = ({
           rollDeg !== null ? `Alarm: >${T.heelAlarmDeg}° for ${T.heelAlarmSecs}s` : "navigation.attitude unavailable"
         }
       />
-      {/* Slamming */}
       <AlarmRow
         label="Slamming / Acceleration"
         level={slamAlarm.level}
         value={`${Math.round(slamsPerHour)} slams/hr`}
         sub={`Alarm: >${T.slamsPerHour}/hr  (>${T.slamMs2} m/s² deviation)`}
       />
-      {/* Overpowered */}
       <AlarmRow
         label="Overpowered"
         level={overpowerAlarm.level}
@@ -992,7 +917,7 @@ const PassageSafety = ({
   )
 }
 
-// ─── PROGNOSIS (preserved from v3) ───────────────────────────────────────────
+// ── Prognosis ─────────────────────────────────────────────────────────────────
 const PrognosisPanel = ({ prognosis }: { prognosis: Prognosis }) => {
   const rows = [
     { label: "Season", value: prognosis.season },
@@ -1017,7 +942,7 @@ const PrognosisPanel = ({ prognosis }: { prognosis: Prognosis }) => {
         >
           <div
             style={{
-              fontSize: 10,
+              fontSize: 11,
               color: C.accent,
               letterSpacing: "0.18em",
               textTransform: "uppercase",
@@ -1028,7 +953,7 @@ const PrognosisPanel = ({ prognosis }: { prognosis: Prognosis }) => {
           </div>
           <div
             style={{
-              fontSize: 13,
+              fontSize: 15,
               fontWeight: 600,
               color: value ? "#e8f8ff" : C.faint,
               fontFamily: MONO,
@@ -1044,7 +969,7 @@ const PrognosisPanel = ({ prognosis }: { prognosis: Prognosis }) => {
   )
 }
 
-// ─── MAIN HOOK ────────────────────────────────────────────────────────────────
+// ── Main Hook ─────────────────────────────────────────────────────────────────
 function useWeatherSignalK() {
   const [connected, setConnected] = useState(false)
   const [tws, setTws] = useState<number | null>(null)
@@ -1056,12 +981,8 @@ function useWeatherSignalK() {
     quadrant: null,
   })
   const [squall, setSquall] = useState<SquallState>({ score: 0, pressureSlope: null, windVariation: null, risk: "LOW" })
-
-  // Sail plan
   const [twsBuf, setTwsBuf] = useState<number[]>([])
   const [sustainedAlarm, setSustainedAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
-
-  // Wind shift
   const [twdBuf, setTwdBuf] = useState<number[]>([])
   const [shiftAlarm, setShiftAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
   const [veerAlarm, setVeerAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
@@ -1071,8 +992,6 @@ function useWeatherSignalK() {
     label: "Steady",
     slope: 0,
   })
-
-  // Trend alarms
   const [twsAlarm, setTwsAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
   const [dirAlarm, setDirAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
   const [baroAlarm, setBaroAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
@@ -1082,31 +1001,24 @@ function useWeatherSignalK() {
   const [twsSpark, setTwsSpark] = useState<number[]>([])
   const [dirSpark, setDirSpark] = useState<number[]>([])
   const [pressSpark, setPressSpark] = useState<number[]>([])
-
-  // Passage safety
   const [heelAlarm, setHeelAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
   const [slamAlarm, setSlamAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
   const [overpowerAlarm, setOverpowerAlarm] = useState<AlarmState>({ level: "OK", since: 0, clearSince: 0 })
   const [roll, setRoll] = useState<number | null>(null)
   const [slamsPerHrState, setSlamsPerHrState] = useState(0)
 
-  // Refs — raw buffers, no re-render on every sample
   const buf = useRef<Record<string, number>>({})
   const strBuf = useRef<Record<string, string>>({})
   const wsRef = useRef<WebSocket | null>(null)
   const reconnRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const histBooted = useRef(false)
-
-  // Per-alarm rolling buffers
-  const twsBufRef = useRef<WindSample[]>([]) // {t, tws, twd}
-  const pressRef = useRef<PressureSample[]>([]) // {t, hpa}
-  const attBufRef = useRef<AttitudeSample[]>([]) // {roll, pitch}
-  const accelBufRef = useRef<AccelSample[]>([]) // {x,y,z,t}
-  const _twdHistRef = useRef<number[]>([]) // raw deg, last 15 min
-
-  // Audio prev-level tracking
+  const twsBufRef = useRef<WindSample[]>([])
+  const pressRef = useRef<PressureSample[]>([])
+  const attBufRef = useRef<AttitudeSample[]>([])
+  const accelBufRef = useRef<AccelSample[]>([])
   const prevAlarmLevels = useRef<Record<string, AlarmLevel>>({})
+
   function handleAudioTransition(id: string, newLevel: AlarmLevel, message: string) {
     const prev = prevAlarmLevels.current[id] ?? "OK"
     if (newLevel === "ALARM" && prev !== "ALARM") fireAudio(id, message)
@@ -1114,7 +1026,6 @@ function useWeatherSignalK() {
     prevAlarmLevels.current[id] = newLevel
   }
 
-  // Boot pressure history
   useEffect(() => {
     if (histBooted.current) return
     histBooted.current = true
@@ -1123,41 +1034,36 @@ function useWeatherSignalK() {
         if (!samples.length) return
         pressRef.current = samples
         setPressSpark(samples.slice(-30).map((s) => s.hpa))
-        console.log(`[WeatherView] Pressure history: ${samples.length} pts`)
       })
       .catch((e) => console.warn("[WeatherView] Pressure history:", e.message))
   }, [])
 
-  // Main 5-second tick — all alarm processing
   const tick = useCallback(() => {
     const b = buf.current
     const now = Date.now()
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
     const getTws = () => (b["environment.wind.speedTrue"] != null ? msToKn(b["environment.wind.speedTrue"]) : null)
     const getTwd = (): number | null => {
       if (b["environment.wind.directionTrue"] != null) return radToDeg(b["environment.wind.directionTrue"])
       if (b["environment.wind.directionMagnetic"] != null) return radToDeg(b["environment.wind.directionMagnetic"])
       return null
     }
-
     const currentTws = getTws()
     const currentTwd = getTwd()
     setTws(currentTws)
 
-    // ── Append wind sample ────────────────────────────────────────────────────
     if (currentTws !== null && currentTwd !== null) {
-      const sample: WindSample = { t: now, tws: currentTws, twd: currentTwd }
-      twsBufRef.current = [...twsBufRef.current.filter((s) => now - s.t < 20 * 60 * 1000), sample]
+      twsBufRef.current = [
+        ...twsBufRef.current.filter((s) => now - s.t < 20 * 60 * 1000),
+        { t: now, tws: currentTws, twd: currentTwd },
+      ]
     }
-
-    // ── Pressure sample ───────────────────────────────────────────────────────
     if (b["environment.outside.pressure"]) {
-      const hpa = paToHpa(b["environment.outside.pressure"])
-      pressRef.current = [...pressRef.current.filter((s) => now - s.t < 3 * 3600 * 1000), { t: now, hpa }]
+      pressRef.current = [
+        ...pressRef.current.filter((s) => now - s.t < 3 * 3600 * 1000),
+        { t: now, hpa: paToHpa(b["environment.outside.pressure"]) },
+      ]
     }
 
-    // ── Squall calculation ───────────────────────────────────────────────────
     const old1h = pressRef.current.find((s) => now - s.t >= 55 * 60 * 1000)
     let pressureSlope: number | null = null
     let pressScore = 0
@@ -1177,7 +1083,6 @@ function useWeatherSignalK() {
       squallScore > 0.8 ? "IMMINENT" : squallScore > 0.6 ? "HIGH" : squallScore > 0.3 ? "MODERATE" : "LOW"
     setSquall({ score: Math.round(squallScore * 100) / 100, pressureSlope, windVariation, risk: squallRisk })
 
-    // ── SAIL PLAN: sustained alarm ─────────────────────────────────────────
     const buf5min = twsBufRef.current.filter((s) => now - s.t < T.sustainedMins * 60 * 1000).map((s) => s.tws)
     const meanTws5 = buf5min.length ? buf5min.reduce((a, v) => a + v, 0) / buf5min.length : 0
     const sailPlan = getSailPlan(currentTws)
@@ -1202,13 +1107,11 @@ function useWeatherSignalK() {
     })
     setTwsBuf(twsBufRef.current.slice(-30).map((s) => s.tws))
 
-    // ── WIND SHIFT alarms ─────────────────────────────────────────────────
     const dirs15min = twsBufRef.current.filter((s) => now - s.t < 15 * 60 * 1000).map((s) => s.twd)
     const dirs5min = twsBufRef.current.filter((s) => now - s.t < 5 * 60 * 1000).map((s) => s.twd)
     const dirs90s = twsBufRef.current.filter((s) => now - s.t < 90 * 1000).map((s) => s.twd)
     setTwdBuf(dirs15min)
 
-    // Shift magnitude vs 5-min mean
     const mean5 = circMean(dirs5min)
     const shiftMag = dirs5min.length > 3 && currentTwd !== null ? Math.abs(cirDiff(currentTwd, mean5)) : 0
     setShiftAlarm((prev) => {
@@ -1217,17 +1120,13 @@ function useWeatherSignalK() {
       return next
     })
 
-    // Backing / veering: linear slope on unwrapped TWD
     let trendSlope = 0
     if (dirs15min.length > 5) {
-      // Unwrap to avoid 359→1 discontinuity
       const unwrapped: number[] = [dirs15min[0]]
       for (let i = 1; i < dirs15min.length; i++) {
-        const diff = cirDiff(dirs15min[i], dirs15min[i - 1])
-        unwrapped.push(unwrapped[i - 1] + diff)
+        unwrapped.push(unwrapped[i - 1] + cirDiff(dirs15min[i], dirs15min[i - 1]))
       }
-      const pts = unwrapped.map((y, x) => ({ x, y }))
-      trendSlope = Math.round(linSlope(pts) * 12 * 10) / 10 // per sample → per min (5s samples, 12/min)
+      trendSlope = Math.round(linSlope(unwrapped.map((y, x) => ({ x, y }))) * 12 * 10) / 10
     }
     const veerLabel = Math.abs(trendSlope) < 1 ? "Steady" : trendSlope > 0 ? "Veering ▶" : "Backing ◀"
     setWindTrend({ deg: currentTwd ?? 0, label: veerLabel, slope: trendSlope })
@@ -1248,23 +1147,19 @@ function useWeatherSignalK() {
       return next
     })
 
-    // 180° reversal
     const rev90sMin = dirs90s.length > 2 ? circMean(dirs90s.slice(0, Math.floor(dirs90s.length / 2))) : null
     const rev90sMax = dirs90s.length > 2 ? circMean(dirs90s.slice(Math.floor(dirs90s.length / 2))) : null
     const reversalMag = rev90sMin !== null && rev90sMax !== null ? Math.abs(cirDiff(rev90sMax, rev90sMin)) : 0
     setReversalAlarm((prev) => {
-      const next = tickAlarm(prev, reversalMag > T.reversalDeg, 0, now) // immediate
+      const next = tickAlarm(prev, reversalMag > T.reversalDeg, 0, now)
       handleAudioTransition("reversal", next.level, "Wind reversal detected — squall passing")
       return next
     })
 
-    // ── TREND ALARMS ──────────────────────────────────────────────────────
-    // TWS slope
     const tws15 = twsBufRef.current.filter((s) => now - s.t < 15 * 60 * 1000)
     let twsSlopeVal = 0
     if (tws15.length > 5) {
-      const pts = tws15.map((s) => ({ x: s.t / 60000, y: s.tws }))
-      twsSlopeVal = Math.round(linSlope(pts) * 10) / 10
+      twsSlopeVal = Math.round(linSlope(tws15.map((s) => ({ x: s.t / 60000, y: s.tws }))) * 10) / 10
     }
     setTwsSlope(twsSlopeVal)
     setTwsSpark(tws15.slice(-20).map((s) => s.tws))
@@ -1281,18 +1176,15 @@ function useWeatherSignalK() {
       return next
     })
 
-    // Direction rate (30s)
     const dirs30s = twsBufRef.current.filter((s) => now - s.t < 30 * 1000)
     let dirRateVal = 0
     if (dirs30s.length > 1) {
-      const first = dirs30s[0].twd
-      const last = dirs30s[dirs30s.length - 1].twd
       const dt = (dirs30s[dirs30s.length - 1].t - dirs30s[0].t) / 60000
-      dirRateVal = dt > 0 ? Math.abs(cirDiff(last, first)) / dt : 0
-      dirRateVal = Math.round(dirRateVal * 10) / 10
+      dirRateVal =
+        dt > 0 ? Math.round((Math.abs(cirDiff(dirs30s[dirs30s.length - 1].twd, dirs30s[0].twd)) / dt) * 10) / 10 : 0
     }
     setDirRate(dirRateVal)
-    setDirSpark(dirs30s.map((s) => s.twd % 45)) // relative for sparkline only
+    setDirSpark(dirs30s.map((s) => s.twd % 45))
     setDirAlarm((prev) => {
       const next = twoLevelAlarm(
         prev,
@@ -1310,8 +1202,7 @@ function useWeatherSignalK() {
       return next
     })
 
-    // Barometric combined trigger
-    const p3hAgo = pressRef.current.find((s) => now - s.t >= 170 * 60 * 1000) // ~3h back
+    const p3hAgo = pressRef.current.find((s) => now - s.t >= 170 * 60 * 1000)
     const pNow = pressRef.current[pressRef.current.length - 1]
     let pressSlope3hVal: number | null = null
     if (p3hAgo && pNow) {
@@ -1320,10 +1211,14 @@ function useWeatherSignalK() {
     }
     setPressSpark(pressRef.current.slice(-30).map((s) => s.hpa))
     setBaroAlarm((prev) => {
-      const dropping = pressSlope3hVal !== null && pressSlope3hVal < -T.pressAlarmDrop
-      const risingWind = twsSlopeVal > T.twsWatchSlope
-      const watch = pressSlope3hVal !== null && pressSlope3hVal < -T.pressWatchDrop
-      const next = twoLevelAlarm(prev, watch, dropping && risingWind, 5 * 60 * 1000, 5 * 60 * 1000, now)
+      const next = twoLevelAlarm(
+        prev,
+        pressSlope3hVal !== null && pressSlope3hVal < -T.pressWatchDrop,
+        pressSlope3hVal !== null && pressSlope3hVal < -T.pressAlarmDrop && twsSlopeVal > T.twsWatchSlope,
+        5 * 60 * 1000,
+        5 * 60 * 1000,
+        now,
+      )
       handleAudioTransition(
         "baro-combined",
         next.level,
@@ -1332,8 +1227,6 @@ function useWeatherSignalK() {
       return next
     })
 
-    // ── PASSAGE SAFETY ────────────────────────────────────────────────────
-    // Heel
     const rollRad = b["navigation.attitude.roll"] ?? null
     setRoll(rollRad)
     if (rollRad !== null) {
@@ -1356,7 +1249,6 @@ function useWeatherSignalK() {
       })
     }
 
-    // Slamming
     const az = b["environment.venus.29.accelerationZ"] ?? null
     if (az !== null) {
       accelBufRef.current = [
@@ -1368,10 +1260,8 @@ function useWeatherSignalK() {
           t: now,
         },
       ]
-      // Baseline: 30s mean of Z
       const z30s = accelBufRef.current.filter((s) => now - s.t < 30 * 1000).map((s) => s.z)
       const zBase = z30s.reduce((a, v) => a + v, 0) / (z30s.length || 1)
-      // Slam events in last hour: single samples with |z - baseline| > threshold
       const slamCount = accelBufRef.current.filter((s) => Math.abs(s.z - zBase) > T.slamMs2).length
       setSlamsPerHrState(slamCount)
       setSlamAlarm((prev) => {
@@ -1381,7 +1271,6 @@ function useWeatherSignalK() {
       })
     }
 
-    // Overpowered
     const heelDeg = rollRad !== null ? Math.abs((rollRad * 180) / Math.PI) : null
     const overpowered =
       currentTws !== null &&
@@ -1392,7 +1281,6 @@ function useWeatherSignalK() {
       return next
     })
 
-    // Prognosis update from string buffer
     const s = strBuf.current
     setPrognosis({
       season: s["environment.outside.pressure.prediction.season"] ?? null,
@@ -1401,16 +1289,13 @@ function useWeatherSignalK() {
       frontWind: s["environment.outside.pressure.prediction.front.wind"] ?? null,
       quadrant: s["environment.outside.pressure.prediction.quadrant"] ?? null,
     })
-  }, []) // no deps — reads refs, updates state
+  }, [])
 
-  // WS message handler
   const processUpdate = useCallback((path: string, value: unknown) => {
     if (typeof value === "string") {
       strBuf.current[path] = value
       return
     }
-
-    // navigation.attitude arrives as an object {yaw, pitch, roll}
     if (path === "navigation.attitude" && typeof value === "object" && value !== null) {
       const att = value as { yaw?: number; pitch?: number; roll?: number }
       if (att.roll != null) buf.current["navigation.attitude.roll"] = att.roll
@@ -1467,22 +1352,11 @@ function useWeatherSignalK() {
     }
   }, [connect, tick])
 
-  // Worst alarm level across all panels (for header)
   const worstLevel = (levels: AlarmLevel[]): AlarmLevel => {
     if (levels.includes("ALARM")) return "ALARM"
     if (levels.includes("WATCH")) return "WATCH"
     return "OK"
   }
-
-  const topRowWorst = worstLevel([sustainedAlarm.level, shiftAlarm.level, veerAlarm.level, reversalAlarm.level])
-  const bottomRowWorst = worstLevel([
-    twsAlarm.level,
-    dirAlarm.level,
-    baroAlarm.level,
-    heelAlarm.level,
-    slamAlarm.level,
-    overpowerAlarm.level,
-  ])
 
   return {
     connected,
@@ -1510,16 +1384,21 @@ function useWeatherSignalK() {
     overpowerAlarm,
     roll,
     slamsPerHr: slamsPerHrState,
-    topRowWorst,
-    bottomRowWorst,
+    topRowWorst: worstLevel([sustainedAlarm.level, shiftAlarm.level, veerAlarm.level, reversalAlarm.level]),
+    bottomRowWorst: worstLevel([
+      twsAlarm.level,
+      dirAlarm.level,
+      baroAlarm.level,
+      heelAlarm.level,
+      slamAlarm.level,
+      overpowerAlarm.level,
+    ]),
   }
 }
 
-// ─── MAIN VIEW ────────────────────────────────────────────────────────────────
+// ── Main View ─────────────────────────────────────────────────────────────────
 const WeatherView = () => {
   const d = useWeatherSignalK()
-
-  // Overall alarm level for header status
   const overallLevel: AlarmLevel =
     d.topRowWorst === "ALARM" || d.bottomRowWorst === "ALARM"
       ? "ALARM"
@@ -1535,7 +1414,6 @@ const WeatherView = () => {
         @keyframes scanLine { from{top:0} to{top:100%} }
         @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:0.5} }
       `}</style>
-
       <div
         style={{
           width: "100%",
@@ -1546,8 +1424,8 @@ const WeatherView = () => {
           fontFamily: MONO,
           overflow: "hidden",
           position: "relative",
-          gap: 5,
-          padding: 7,
+          gap: 3,
+          padding: 5,
           boxSizing: "border-box",
         }}
       >
@@ -1579,7 +1457,7 @@ const WeatherView = () => {
             >
               Weather · Safety & Passage
             </div>
-            <div style={{ fontSize: 18, fontFamily: "'Cinzel', serif", color: "#daf2ff", letterSpacing: "0.12em" }}>
+            <div style={{ fontSize: 16, fontFamily: "'Cinzel', serif", color: "#daf2ff", letterSpacing: "0.12em" }}>
               Dance Of The Spirits
             </div>
           </div>
@@ -1602,8 +1480,8 @@ const WeatherView = () => {
           </div>
         </div>
 
-        {/* Row 1: Sail Plan | Wind Shift | Squall */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, flex: 1, minHeight: 0 }}>
+        {/* Row 1 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3, flex: 1, minHeight: 0 }}>
           <Panel title="Sail Plan Monitor" alarmLevel={d.sustainedAlarm.level}>
             <SailPlanMonitor tws={d.tws} twsBuf={d.twsBuf} sustainedAlarm={d.sustainedAlarm} />
           </Panel>
@@ -1624,8 +1502,8 @@ const WeatherView = () => {
           </Panel>
         </div>
 
-        {/* Row 2: Trend Alarms | Passage Safety | Prognosis */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, flex: 1, minHeight: 0 }}>
+        {/* Row 2 */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 3, flex: 1, minHeight: 0 }}>
           <Panel
             title="Trend Alarms"
             alarmLevel={[d.twsAlarm, d.dirAlarm, d.baroAlarm].find((a) => a.level !== "OK")?.level ?? "OK"}

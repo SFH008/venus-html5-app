@@ -1,33 +1,16 @@
 /**
- * PowerView.tsx  v2
+ * PowerView.tsx  v4
  *
- * Layout — 2 rows, no scrolling:
- *
- *   ┌─────────────────────────────────────────────────────────────────────┐
- *   │ STATUS + ALARM BANNER (collapses when clear)                        │
- *   ├──────────────┬──────────────┬─────────────────────────────────────┤
- *   │ ROW 1 (55%)  │              │                                      │
- *   │ [SOC + Flow] │ [REC BMS]    │ [BMV712 + Relay]                     │
- *   ├──────────────┼──────────────┼─────────────────────────────────────┤
- *   │ ROW 2 (45%)  │              │                                      │
- *   │ [Quattro]    │ [MPPT]       │ [Energy Balance]                     │
- *   └──────────────┴──────────────┴─────────────────────────────────────┘
- *
- * Alarms (fire SignalK PUT notifications):
- *   1. Low SoC            — below pvAlarmSocLow  (default 20%)
- *   2. High SoC           — above pvAlarmSocHigh (default 98%)
- *   3. Cell delta         — REC BMS spread above pvAlarmCellDelta (default 50 mV)
- *   4. Quattro load high  — AC out power above pvAlarmLoadWatts (default 3500 W)
- *   5. Battery high temp  — above pvAlarmTempHigh (default 45 °C)
- *
- * Alarm thresholds are configurable in SettingsView → PowerView.
+ * 3-row layout:
+ *   Row 1 (50%) — House Bank | REC BMS | BMV712
+ *   Row 2 (30%) — Quattro metrics | MPPT Solar | Energy Balance
+ *   Row 3 (20%) — Quattro Controls | REC BMS Relays | BMV712 + Lynx Relays
  */
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import type React from "react"
 import { getConfig } from "../../config/AppConfig"
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
 const _cfg = getConfig()
 const SK_WS_URL = `ws://${_cfg.signalkHost}:${_cfg.signalkPort}/signalk/v1/stream?subscribe=none`
 const SK_API = `http://${_cfg.signalkHost}:${_cfg.signalkPort}/signalk/v1/api/vessels/self`
@@ -37,15 +20,20 @@ const INV = _cfg.pvInverterPath
 const BMVR = _cfg.pvBmvRelayPath
 const REC_WS = _cfg.pvRecBmsWsUrl
 const N_PFX = _cfg.notifPrefix
-
-// Alarm thresholds — fall back to safe defaults if not yet in AppConfig
 const TH_SOC_LO = _cfg.pvAlarmSocLow
 const TH_SOC_HI = _cfg.pvAlarmSocHigh
 const TH_DELTA = _cfg.pvAlarmCellDelta
 const TH_LOAD = _cfg.pvAlarmLoadWatts
 const TH_TEMP = _cfg.pvAlarmTempHigh
 
-// ─── PALETTE — matches WeatherView ───────────────────────────────────────────
+// Relay paths
+const PATH_QUATTRO_MODE = "electrical.chargers.276.mode"
+const PATH_GEN_RELAY = "electrical.inverters.276.relay.state"
+const PATH_REC_CHARGE = "electrical.batteries.bms.charge.state"
+const PATH_REC_DISCHARGE = "electrical.batteries.bms.discharge.state"
+const PATH_BMV_RELAY = "electrical.batteries.278.relay.state"
+const PATH_LYNX_RELAY = "electrical.batteries.0.relay.state"
+
 const MONO = "'Share Tech Mono', monospace"
 const C = {
   bg: "#000509",
@@ -62,7 +50,6 @@ const C = {
   teal: "#2dd4bf",
 }
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
 const f1 = (v: number | null, u = "") => (v === null ? "—" : `${v.toFixed(1)}${u}`)
 const f0 = (v: number | null, u = "") => (v === null ? "—" : `${Math.round(v)}${u}`)
 const kC = (k: number | null) => (k === null ? null : Math.round((k - 273.15) * 10) / 10)
@@ -79,7 +66,6 @@ const socCol = (soc: number | null) => {
   return C.red
 }
 
-// ─── STATE TYPES ─────────────────────────────────────────────────────────────
 interface BatS {
   v: number | null
   a: number | null
@@ -93,6 +79,9 @@ interface BatS {
   balancing: boolean | null
   recConn: boolean
   bmvRelay: boolean | null
+  lynxRelay: boolean | null
+  recCharge: boolean | null
+  recDischarge: boolean | null
 }
 interface InvS {
   dcV: number | null
@@ -105,6 +94,8 @@ interface InvS {
   acIW: number | null
   mode: string | null
   state: string | null
+  chargingMode: string | null
+  genRelay: boolean | null
 }
 interface SolS {
   pV: number | null
@@ -118,7 +109,6 @@ interface FC {
   wh: number
 }
 
-// ─── ALARM DEFINITIONS ───────────────────────────────────────────────────────
 type Level = "alarm" | "warn" | "normal"
 interface AD {
   id: string
@@ -141,7 +131,7 @@ const ALARMS: AD[] = [
     label: "SoC High",
     level: "warn",
     check: (b) => b.soc !== null && b.soc * 100 > TH_SOC_HI,
-    msg: (b) => `SoC ${b.soc !== null ? Math.round(b.soc * 100) : "?"}% — above ${TH_SOC_HI}% (overcharge risk)`,
+    msg: (b) => `SoC ${b.soc !== null ? Math.round(b.soc * 100) : "?"}% — above ${TH_SOC_HI}%`,
   },
   {
     id: "pv-cell-delta",
@@ -155,18 +145,17 @@ const ALARMS: AD[] = [
     label: "High Load",
     level: "warn",
     check: (_b, i) => i.acOW !== null && i.acOW > TH_LOAD,
-    msg: (_b, i) => `Load ${i.acOW !== null ? Math.round(i.acOW) : "?"}W — above ${TH_LOAD}W limit`,
+    msg: (_b, i) => `Load ${i.acOW !== null ? Math.round(i.acOW) : "?"}W — above ${TH_LOAD}W`,
   },
   {
     id: "pv-temp-high",
     label: "Battery Temp",
     level: "alarm",
     check: (b) => b.tempC !== null && b.tempC > TH_TEMP,
-    msg: (b) => `Battery ${b.tempC}°C — above ${TH_TEMP}°C limit`,
+    msg: (b) => `Battery ${b.tempC}°C — above ${TH_TEMP}°C`,
   },
 ]
 
-// ─── SK HELPERS ──────────────────────────────────────────────────────────────
 const skPut = (dot: string, val: unknown) =>
   fetch(`${SK_API}/${dot.replace(/\./g, "/")}`, {
     method: "PUT",
@@ -174,7 +163,7 @@ const skPut = (dot: string, val: unknown) =>
     body: JSON.stringify({ value: val }),
   }).catch(() => {})
 
-const fireAlarm = (id: string, level: Level, msg: string) => {
+const fireAlarm = (id: string, level: Level, msg: string) =>
   skPut(`notifications/${N_PFX.replace(/\./g, "/")}/power/${id}`, {
     state: level,
     method: ["sound", "visual"],
@@ -185,12 +174,9 @@ const fireAlarm = (id: string, level: Level, msg: string) => {
     volWarn: _cfg.volWarn,
     zone: "all",
   })
-}
-const clearAlarm = (id: string) => {
+const clearAlarm = (id: string) =>
   skPut(`notifications/${N_PFX.replace(/\./g, "/")}/power/${id}`, { state: "normal", method: [], message: "cleared" })
-}
 
-// ─── SK SUBSCRIPTIONS ────────────────────────────────────────────────────────
 const SUBS = [
   { path: `${BAT}.voltage`, period: 2000 },
   { path: `${BAT}.current`, period: 2000 },
@@ -214,6 +200,13 @@ const SUBS = [
   { path: `${SOL}.panelPower`, period: 5000 },
   { path: `${SOL}.yieldToday`, period: 60000 },
   { path: `${SOL}.state`, period: 5000 },
+  { path: PATH_QUATTRO_MODE, period: 5000 },
+  { path: PATH_GEN_RELAY, period: 5000 },
+  { path: PATH_REC_CHARGE, period: 5000 },
+  { path: PATH_REC_DISCHARGE, period: 5000 },
+  { path: PATH_BMV_RELAY, period: 5000 },
+  { path: PATH_LYNX_RELAY, period: 5000 },
+  { path: "electrical.chargers.276.chargingMode", period: 5000 },
   { path: "navigation.position", period: 30000 },
 ]
 
@@ -229,33 +222,31 @@ async function fetchFC(lat: number, lon: number): Promise<FC[]> {
   }))
 }
 
-// ─── MINI COMPONENTS ─────────────────────────────────────────────────────────
+// ─── COMPONENTS ──────────────────────────────────────────────────────────────
 
-// Label/value row
 const R = ({ label, value, unit, color = C.dim }: { label: string; value: string; unit?: string; color?: string }) => (
   <div
     style={{
       display: "flex",
       justifyContent: "space-between",
       alignItems: "baseline",
-      padding: "1px 0",
+      padding: "4px 0",
       borderBottom: `1px solid rgba(0,150,255,0.06)`,
     }}
   >
-    <span style={{ fontSize: 13, color: C.dim, fontFamily: MONO, letterSpacing: "0.06em" }}>{label}</span>
-    <span style={{ fontSize: 11, color, fontFamily: MONO }}>
+    <span style={{ fontSize: 15, color: C.dim, fontFamily: MONO, letterSpacing: "0.06em" }}>{label}</span>
+    <span style={{ fontSize: 17, color, fontFamily: MONO, fontWeight: 600 }}>
       {value}
-      {unit && <span style={{ fontSize: 11, color: C.faint }}> {unit}</span>}
+      {unit && <span style={{ fontSize: 14, color: C.faint }}> {unit}</span>}
     </span>
   </div>
 )
 
-// SOC arc gauge (compact 76px)
 const SocArc = ({ soc }: { soc: number | null }) => {
   const p = soc === null ? 0 : Math.min(1, Math.max(0, soc))
-  const r = 35,
-    cx = 48,
-    cy = 48,
+  const r = 42,
+    cx = 55,
+    cy = 55,
     sA = -210,
     tA = 240
   const toR = (d: number) => (d * Math.PI) / 180
@@ -265,12 +256,12 @@ const SocArc = ({ soc }: { soc: number | null }) => {
     la = p * tA > 180 ? 1 : 0
   const col = socCol(soc)
   return (
-    <svg width={96} height={96} style={{ flexShrink: 0 }}>
+    <svg width={110} height={110} style={{ flexShrink: 0 }}>
       <path
         d={`M ${ax(sA)} ${ay(sA)} A ${r} ${r} 0 1 1 ${ax(sA + tA)} ${ay(sA + tA)}`}
         fill="none"
         stroke="rgba(0,210,255,0.08)"
-        strokeWidth={7}
+        strokeWidth={8}
         strokeLinecap="round"
       />
       {p > 0 && (
@@ -278,42 +269,41 @@ const SocArc = ({ soc }: { soc: number | null }) => {
           d={`M ${ax(sA)} ${ay(sA)} A ${r} ${r} 0 ${la} 1 ${ax(aEnd)} ${ay(aEnd)}`}
           fill="none"
           stroke={col}
-          strokeWidth={7}
+          strokeWidth={6}
           strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 5px ${col}80)` }}
+          style={{ filter: `drop-shadow(0 0 6px ${col}80)` }}
         />
       )}
-      <text x={cx} y={cy + 1} textAnchor="middle" fill={col} fontSize={20} fontWeight={700} fontFamily={MONO}>
+      <text x={cx} y={cy + 2} textAnchor="middle" fill={col} fontSize={26} fontWeight={700} fontFamily={MONO}>
         {soc === null ? "—" : Math.round(p * 100)}
       </text>
-      <text x={cx} y={cy + 15} textAnchor="middle" fill={C.faint} fontSize={11} fontFamily={MONO}>
+      <text x={cx} y={cy + 19} textAnchor="middle" fill={C.faint} fontSize={12} fontFamily={MONO}>
         %SOC
       </text>
     </svg>
   )
 }
 
-// Cell delta bar
 const DeltaBar = ({ delta }: { delta: number | null }) => {
   const mv = delta === null ? null : Math.round(delta * 1000)
   const pct = mv === null ? 0 : Math.min(1, mv / 200)
   const col = mv === null ? C.faint : mv < 20 ? C.green : mv < 50 ? C.amber : C.red
   return (
-    <div style={{ padding: "1px 0", borderBottom: `1px solid rgba(0,150,255,0.06)` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 1 }}>
-        <span style={{ fontSize: 13, color: C.dim, fontFamily: MONO, letterSpacing: "0.06em" }}>Cell Δ</span>
-        <span style={{ fontSize: 11, color: col, fontFamily: MONO }}>
+    <div style={{ padding: "4px 0", borderBottom: `1px solid rgba(0,150,255,0.06)` }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+        <span style={{ fontSize: 15, color: C.dim, fontFamily: MONO }}>Cell Δ</span>
+        <span style={{ fontSize: 17, color: col, fontFamily: MONO, fontWeight: 600 }}>
           {mv === null ? "—" : mv}
-          <span style={{ fontSize: 11, color: C.faint }}> mV</span>
+          <span style={{ fontSize: 14, color: C.faint }}> mV</span>
         </span>
       </div>
-      <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2 }}>
+      <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 3 }}>
         <div
           style={{
             height: "100%",
             width: `${pct * 100}%`,
             background: col,
-            borderRadius: 2,
+            borderRadius: 3,
             boxShadow: `0 0 4px ${col}80`,
             transition: "width 0.5s",
           }}
@@ -323,57 +313,118 @@ const DeltaBar = ({ delta }: { delta: number | null }) => {
   )
 }
 
-// Power flow line
 const Flow = ({ w }: { w: number | null }) => {
-  if (w === null) return <span style={{ color: C.dim, fontFamily: MONO, fontSize: 13 }}>— W</span>
+  if (w === null) return <span style={{ color: C.dim, fontFamily: MONO, fontSize: 14 }}>— W</span>
   const chg = w >= 0,
     abs = Math.abs(w)
   const label = abs >= 1000 ? `${(abs / 1000).toFixed(2)} kW` : `${Math.round(abs)} W`
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-      <span style={{ color: chg ? C.green : C.amber, fontSize: 11 }}>{chg ? "▲" : "▼"}</span>
-      <span style={{ color: chg ? C.green : C.amber, fontFamily: MONO, fontSize: 15, fontWeight: 700 }}>{label}</span>
-      <span style={{ color: C.faint, fontFamily: MONO, fontSize: 9 }}>{chg ? "CHG" : "DIS"}</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+      <span style={{ color: chg ? C.green : C.amber, fontSize: 14 }}>{chg ? "▲" : "▼"}</span>
+      <span style={{ color: chg ? C.green : C.amber, fontFamily: MONO, fontSize: 20, fontWeight: 700 }}>{label}</span>
+      <span style={{ color: C.faint, fontFamily: MONO, fontSize: 12 }}>{chg ? "CHG" : "DIS"}</span>
     </div>
   )
 }
 
-// Relay button
-const RelayBtn = ({
+// Toggle relay button — used in Row 3
+const ToggleBtn = ({
   label,
   state,
   onToggle,
-  disabled,
-  color = C.blue,
+  pending = false,
+  colorOn = C.green,
+  colorOff = C.faint,
 }: {
   label: string
   state: boolean | null
   onToggle: () => void
-  disabled: boolean
-  color?: string
+  pending?: boolean
+  colorOn?: string
+  colorOff?: string
+}) => {
+  const on = state === true
+  const col = on ? colorOn : colorOff
+  return (
+    <button
+      onClick={onToggle}
+      disabled={pending}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        width: "100%",
+        padding: "9px 12px",
+        borderRadius: 5,
+        cursor: pending ? "default" : "pointer",
+        background: on ? `${colorOn}14` : "rgba(255,255,255,0.03)",
+        border: `1px solid ${on ? colorOn + "88" : "rgba(255,255,255,0.1)"}`,
+        color: col,
+        fontFamily: MONO,
+        fontSize: 15,
+        fontWeight: 600,
+        boxShadow: on ? `0 0 6px ${colorOn}30` : "none",
+        transition: "all 0.2s",
+        opacity: pending ? 0.5 : 1,
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ fontSize: 14, letterSpacing: "0.1em", color: on ? colorOn : "rgba(200,220,255,0.3)" }}>
+        {pending ? "…" : on ? "ON" : "OFF"}
+      </span>
+    </button>
+  )
+}
+
+// Quattro mode button — one of four
+const ModeBtn = ({
+  label,
+  active,
+  color,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  color: string
+  onClick: () => void
 }) => (
   <button
-    onClick={onToggle}
-    disabled={disabled || state === null}
+    onClick={onClick}
     style={{
-      padding: "4px 8px",
-      borderRadius: 5,
-      cursor: disabled || state === null ? "default" : "pointer",
-      background: state ? `${color}18` : "rgba(255,255,255,0.03)",
-      border: `1px solid ${state ? color : "rgba(255,255,255,0.1)"}`,
-      color: state ? color : C.dim,
+      flex: 1,
+      padding: "10px 4px",
+      borderRadius: 4,
+      cursor: "pointer",
+      background: active ? `${color}18` : "rgba(255,255,255,0.02)",
+      border: `1px solid ${active ? color : "rgba(255,255,255,0.08)"}`,
+      color: active ? color : C.faint,
       fontFamily: MONO,
       fontSize: 12,
-      boxShadow: state ? `0 0 5px ${color}30` : "none",
+      fontWeight: active ? 700 : 400,
+      boxShadow: active ? `0 0 6px ${color}35` : "none",
       transition: "all 0.2s",
-      opacity: disabled || state === null ? 0.4 : 1,
     }}
   >
-    {state === null ? "…" : state ? `● ${label}` : `○ ${label}`}
+    {label}
   </button>
 )
 
-// Card wrapper
+const Sec = ({ label, color = C.amber }: { label: string; color?: string }) => (
+  <div
+    style={{
+      fontSize: 11,
+      color,
+      letterSpacing: "0.15em",
+      borderBottom: `1px solid ${color}33`,
+      paddingBottom: 2,
+      marginTop: 3,
+      marginBottom: 2,
+    }}
+  >
+    {label}
+  </div>
+)
+
 const Card = ({
   title,
   icon,
@@ -401,16 +452,16 @@ const Card = ({
   >
     <div
       style={{
-        padding: "4px 8px",
+        padding: "4px 10px",
         borderBottom: `1px solid ${C.border}`,
         background: "rgba(0,0,0,0.2)",
         display: "flex",
         alignItems: "center",
-        gap: 4,
+        gap: 5,
         flexShrink: 0,
       }}
     >
-      <span style={{ fontSize: 11 }}>{icon}</span>
+      <span style={{ fontSize: 12 }}>{icon}</span>
       <span
         style={{
           fontSize: 11,
@@ -428,7 +479,7 @@ const Card = ({
       style={{
         flex: 1,
         minHeight: 0,
-        padding: "6px 8px",
+        padding: "6px 10px",
         display: "flex",
         flexDirection: "column",
         gap: 2,
@@ -440,11 +491,10 @@ const Card = ({
   </div>
 )
 
-// Forecast bars
 const FCBars = ({ fc, posLat }: { fc: FC[]; posLat: number | null }) => {
   if (posLat === null || fc.length === 0)
     return (
-      <div style={{ fontSize: 11, color: C.faint, fontFamily: MONO, textAlign: "center", paddingTop: 6 }}>
+      <div style={{ fontSize: 12, color: C.faint, fontFamily: MONO, textAlign: "center", paddingTop: 6 }}>
         GPS unavailable
       </div>
     )
@@ -454,21 +504,21 @@ const FCBars = ({ fc, posLat }: { fc: FC[]; posLat: number | null }) => {
   const total = day.reduce((s, f) => s + f.wh, 0)
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 1, height: 30 }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 55 }}>
         {day.map((f) => {
           const past = f.hour < now,
             curr = f.hour === now
-          const h = Math.max(2, Math.round((f.wh / maxWh) * 26))
+          const h = Math.max(3, Math.round((f.wh / maxWh) * 50))
           return (
             <div key={f.hour} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center" }}>
               <div
                 style={{
                   width: "100%",
                   height: h,
-                  borderRadius: 1,
+                  borderRadius: 2,
                   transition: "height 0.4s",
                   background: curr ? C.amber : past ? "rgba(255,255,255,0.07)" : C.teal,
-                  boxShadow: curr ? `0 0 3px ${C.amber}60` : "none",
+                  boxShadow: curr ? `0 0 4px ${C.amber}60` : "none",
                   opacity: past ? 0.4 : 1,
                 }}
               />
@@ -477,11 +527,11 @@ const FCBars = ({ fc, posLat }: { fc: FC[]; posLat: number | null }) => {
         })}
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.faint, fontFamily: MONO }}>
-        <span style={{ fontSize: 11, fontFamily: MONO }}>5h</span>
-        <span style={{ fontSize: 11, color: C.amber, fontFamily: MONO }}>now</span>
-        <span style={{ fontSize: 11, fontFamily: MONO }}>21h</span>
+        <span>5h</span>
+        <span style={{ color: C.amber }}>now</span>
+        <span>21h</span>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.dim, fontFamily: MONO }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.dim, fontFamily: MONO }}>
         <span>Est {total >= 1000 ? `${(total / 1000).toFixed(1)} kWh` : `${total} Wh`}</span>
         <span>Peak {f0(Math.max(...day.map((f) => f.wh)), " Wh")}</span>
       </div>
@@ -504,6 +554,9 @@ export default function PowerView() {
     balancing: null,
     recConn: false,
     bmvRelay: null,
+    lynxRelay: null,
+    recCharge: null,
+    recDischarge: null,
   })
   const [inv, setInv] = useState<InvS>({
     dcV: null,
@@ -516,15 +569,16 @@ export default function PowerView() {
     acIW: null,
     mode: null,
     state: null,
+    chargingMode: null,
+    genRelay: null,
   })
   const [sol, setSol] = useState<SolS>({ pV: null, pA: null, pW: null, yWh: null, mode: null })
   const [fc, setFc] = useState<FC[]>([])
   const [posLat, setPosLat] = useState<number | null>(null)
   const [posLon, setPosLon] = useState<number | null>(null)
   const [skConn, setSkConn] = useState(false)
-  const [relPend, setRelPend] = useState<Record<string, boolean>>({})
+  const [pending, setPending] = useState<Record<string, boolean>>({})
   const [alarmOn, setAlarmOn] = useState<Record<string, boolean>>({})
-
   const alarmRef = useRef<Record<string, boolean>>({})
   const buf = useRef<Record<string, number | string | boolean | null>>({})
   const recWsRef = useRef<WebSocket | null>(null)
@@ -557,6 +611,8 @@ export default function PowerView() {
             }
           const b = buf.current
           const num = (k: string) => (b[k] as number) ?? null
+          const bool = (k: string) => (b[k] as boolean) ?? null
+          const str = (k: string) => (b[k] as string) ?? null
           setBat((prev) => ({
             ...prev,
             v: num(`${BAT}.voltage`) ?? prev.v,
@@ -565,7 +621,10 @@ export default function PowerView() {
             tempC: kC(num(`${BAT}.temperature`)) ?? prev.tempC,
             remAh: ((n) => (n != null ? n / 3600 : null))(num(`${BAT}.capacity.remaining`)) ?? prev.remAh,
             ttgS: num(`${BAT}.capacity.timeRemaining`) ?? prev.ttgS,
-            bmvRelay: (b[`${BMVR}.state`] as boolean) ?? prev.bmvRelay,
+            bmvRelay: bool(PATH_BMV_RELAY) ?? prev.bmvRelay,
+            lynxRelay: bool(PATH_LYNX_RELAY) ?? prev.lynxRelay,
+            recCharge: bool(PATH_REC_CHARGE) ?? prev.recCharge,
+            recDischarge: bool(PATH_REC_DISCHARGE) ?? prev.recDischarge,
           }))
           setInv((prev) => ({
             ...prev,
@@ -577,8 +636,10 @@ export default function PowerView() {
             acIV: num(`${INV}.ac.input.voltage`) ?? prev.acIV,
             acIA: num(`${INV}.ac.input.current`) ?? prev.acIA,
             acIW: num(`${INV}.ac.input.power`) ?? prev.acIW,
-            mode: (b[`${INV}.mode`] as string) ?? prev.mode,
-            state: (b[`${INV}.state`] as string) ?? prev.state,
+            mode: str(PATH_QUATTRO_MODE) ?? prev.mode,
+            state: str(`${INV}.state`) ?? prev.state,
+            chargingMode: str("electrical.chargers.276.chargingMode") ?? prev.chargingMode,
+            genRelay: bool(PATH_GEN_RELAY) ?? prev.genRelay,
           }))
           setSol((prev) => ({
             ...prev,
@@ -586,7 +647,7 @@ export default function PowerView() {
             pA: num(`${SOL}.panelCurrent`) ?? prev.pA,
             pW: num(`${SOL}.panelPower`) ?? prev.pW,
             yWh: num(`${SOL}.yieldToday`) ?? prev.yWh,
-            mode: (b[`${SOL}.state`] as string) ?? prev.mode,
+            mode: str(`${SOL}.state`) ?? prev.mode,
           }))
         } catch {
           /**/
@@ -642,20 +703,12 @@ export default function PowerView() {
       return ws
     }
     connect()
-    // Listen for contactor commands from buttons
-    const handler = (e: Event) => {
-      const cmd = (e as CustomEvent).detail
-      if (recWsRef.current?.readyState === WebSocket.OPEN) recWsRef.current.send(JSON.stringify({ command: cmd }))
-    }
-    window.addEventListener("rec-bms-cmd", handler)
     return () => {
       clearTimeout(timer)
       recWsRef.current?.close()
-      window.removeEventListener("rec-bms-cmd", handler)
     }
   }, [])
 
-  // ── Solar forecast
   useEffect(() => {
     if (posLat === null || posLon === null) return
     fetchFC(posLat, posLon)
@@ -663,7 +716,6 @@ export default function PowerView() {
       .catch(() => {})
   }, [posLat, posLon])
 
-  // ── Alarm evaluation
   useEffect(() => {
     const eval_ = () => {
       const next: Record<string, boolean> = {}
@@ -682,27 +734,35 @@ export default function PowerView() {
     return () => clearInterval(id)
   }, [bat, inv])
 
-  // ── Relay controls
-  const toggleBmvRelay = useCallback(async () => {
-    const next = !bat.bmvRelay
-    setRelPend((p) => ({ ...p, bmv: true }))
-    await skPut(`${BMVR}.state`, next)
-    setBat((prev) => ({ ...prev, bmvRelay: next }))
-    setRelPend((p) => ({ ...p, bmv: false }))
-  }, [bat.bmvRelay])
+  // ── Relay toggle helper
+  const toggle = useCallback(async (key: string, path: string, current: boolean | null) => {
+    const next = !current
+    setPending((p) => ({ ...p, [key]: true }))
+    await skPut(path, next)
+    // optimistic update
+    if (path === PATH_BMV_RELAY) setBat((p) => ({ ...p, bmvRelay: next }))
+    else if (path === PATH_LYNX_RELAY) setBat((p) => ({ ...p, lynxRelay: next }))
+    else if (path === PATH_REC_CHARGE) setBat((p) => ({ ...p, recCharge: next }))
+    else if (path === PATH_REC_DISCHARGE) setBat((p) => ({ ...p, recDischarge: next }))
+    else if (path === PATH_GEN_RELAY) setInv((p) => ({ ...p, genRelay: next }))
+    setPending((p) => ({ ...p, [key]: false }))
+  }, [])
 
-  const recContactor = (cmd: "open" | "close") =>
-    window.dispatchEvent(new CustomEvent("rec-bms-cmd", { detail: cmd === "close" ? "relay_close" : "relay_open" }))
-
-  const setInvMode = useCallback(async (mode: string) => {
-    await skPut(`${INV}.mode`, mode)
-    setInv((prev) => ({ ...prev, mode }))
+  const setMode = useCallback(async (mode: string) => {
+    await skPut(PATH_QUATTRO_MODE, mode)
+    setInv((p) => ({ ...p, mode }))
   }, [])
 
   const batW = bat.v !== null && bat.a !== null ? bat.v * bat.a : null
   const activeAlarms = ALARMS.filter((d) => alarmOn[d.id])
 
-  // ── RENDER ─────────────────────────────────────────────────────────────────
+  const QUATTRO_MODES = [
+    { label: "Charger only", color: C.green },
+    { label: "Inverter Only", color: C.amber },
+    { label: "On", color: C.teal },
+    { label: "Off", color: C.dim },
+  ]
+
   return (
     <div
       style={{
@@ -711,25 +771,24 @@ export default function PowerView() {
         background: C.bg,
         display: "flex",
         flexDirection: "column",
-        gap: 6,
-        padding: 8,
+        gap: 4,
+        padding: 6,
         boxSizing: "border-box",
         fontFamily: MONO,
         overflow: "hidden",
       }}
     >
-      {/* ── Status / alarm bar ── */}
+      {/* ── Status bar ── */}
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: 8,
           flexShrink: 0,
-          paddingBottom: 3,
+          paddingBottom: 4,
           borderBottom: `1px solid ${C.border}`,
         }}
       >
-        {/* Connection dots */}
         {[
           { ok: skConn, label: "SK" },
           { ok: bat.recConn, label: "REC" },
@@ -737,17 +796,16 @@ export default function PowerView() {
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 3 }}>
             <div
               style={{
-                width: 5,
-                height: 5,
+                width: 6,
+                height: 6,
                 borderRadius: "50%",
                 background: ok ? C.green : "rgba(100,100,100,0.4)",
-                boxShadow: ok ? `0 0 3px ${C.green}` : "none",
+                boxShadow: ok ? `0 0 4px ${C.green}` : "none",
               }}
             />
-            <span style={{ fontSize: 11, color: ok ? C.green : C.faint }}>{label}</span>
+            <span style={{ fontSize: 12, color: ok ? C.green : C.faint }}>{label}</span>
           </div>
         ))}
-        {/* Active alarm badges */}
         <div style={{ display: "flex", gap: 4, flex: 1, flexWrap: "wrap" }}>
           {activeAlarms.map((d) => (
             <div
@@ -756,13 +814,13 @@ export default function PowerView() {
                 display: "flex",
                 alignItems: "center",
                 gap: 4,
-                padding: "2px 7px",
+                padding: "2px 8px",
                 borderRadius: 3,
                 background: "rgba(239,68,68,0.1)",
                 border: "1px solid rgba(239,68,68,0.35)",
               }}
             >
-              <span style={{ fontSize: 11, color: C.red, fontWeight: 700 }}>⚠ {d.label}</span>
+              <span style={{ fontSize: 12, color: C.red, fontWeight: 700 }}>⚠ {d.label}</span>
               <span style={{ fontSize: 11, color: C.dim }}>{d.msg(bat, inv)}</span>
             </div>
           ))}
@@ -770,20 +828,20 @@ export default function PowerView() {
         <span style={{ fontSize: 11, color: C.faint, letterSpacing: "0.12em" }}>POWER SYSTEMS</span>
       </div>
 
-      {/* ═══════════════ ROW 1 — BATTERIES (55%) ═══════════════ */}
-      <div style={{ flex: 55, display: "flex", gap: 5, minHeight: 0 }}>
-        {/* 1A: House bank — SOC + power flow + key metrics */}
+      {/* ══ ROW 1 — BATTERIES (50%) ══ */}
+      <div style={{ flex: 40, display: "flex", gap: 4, minHeight: 0 }}>
+        {/* 1A: House Bank */}
         <Card title="HOUSE BANK" icon="🔋" accent={socCol(bat.soc)}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <SocArc soc={bat.soc} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <Flow w={batW} />
-              <div style={{ fontSize: 24, fontWeight: 700, color: C.text, fontFamily: MONO, marginTop: 2 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: C.text, fontFamily: MONO, marginTop: 2 }}>
                 {f1(bat.v, " V")}
               </div>
               <div
                 style={{
-                  fontSize: 15,
+                  fontSize: 18,
                   color: bat.a !== null ? (bat.a >= 0 ? C.green : C.amber) : C.dim,
                   fontFamily: MONO,
                 }}
@@ -792,16 +850,14 @@ export default function PowerView() {
               </div>
             </div>
           </div>
-          <div style={{ flex: 1, minHeight: 0 }}>
-            <R label="Remaining" value={f1(bat.remAh)} unit="Ah" />
-            <R label="Time left" value={ttg(bat.ttgS)} color={C.blue} />
-            <R
-              label="Temp"
-              value={f1(bat.tempC)}
-              unit="°C"
-              color={bat.tempC !== null && bat.tempC > TH_TEMP ? C.red : C.dim}
-            />
-          </div>
+          <R label="Remaining" value={f1(bat.remAh)} unit="Ah" />
+          <R label="Time left" value={ttg(bat.ttgS)} color={C.blue} />
+          <R
+            label="Temp"
+            value={f1(bat.tempC)}
+            unit="°C"
+            color={bat.tempC !== null && bat.tempC > TH_TEMP ? C.red : C.dim}
+          />
         </Card>
 
         {/* 1B: REC BMS */}
@@ -825,45 +881,6 @@ export default function PowerView() {
             color={bat.balancing ? C.teal : C.dim}
           />
           <R label="Temp" value={f1(bat.tempC)} unit="°C" />
-          <div style={{ flex: 1 }} />
-          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
-            <button
-              onClick={() => recContactor("close")}
-              disabled={!bat.recConn}
-              style={{
-                flex: 1,
-                padding: "6px 0",
-                borderRadius: 4,
-                cursor: "pointer",
-                background: "rgba(34,197,94,0.1)",
-                border: `1px solid ${C.green}`,
-                color: C.green,
-                fontFamily: MONO,
-                fontSize: 12,
-                opacity: bat.recConn ? 1 : 0.4,
-              }}
-            >
-              ● Close
-            </button>
-            <button
-              onClick={() => recContactor("open")}
-              disabled={!bat.recConn}
-              style={{
-                flex: 1,
-                padding: "6px 0",
-                borderRadius: 4,
-                cursor: "pointer",
-                background: "rgba(239,68,68,0.1)",
-                border: `1px solid ${C.red}`,
-                color: C.red,
-                fontFamily: MONO,
-                fontSize: 12,
-                opacity: bat.recConn ? 1 : 0.4,
-              }}
-            >
-              ○ Open
-            </button>
-          </div>
         </Card>
 
         {/* 1C: BMV712 */}
@@ -879,146 +896,91 @@ export default function PowerView() {
           <R label="Temp" value={f1(bat.tempC)} unit="°C" />
           <R label="Remaining" value={f1(bat.remAh)} unit="Ah" />
           <R label="TTG" value={ttg(bat.ttgS)} color={C.blue} />
-          <div style={{ flex: 1 }} />
-          <RelayBtn label="Aux Relay" state={bat.bmvRelay} onToggle={toggleBmvRelay} disabled={!!relPend.bmv} />
         </Card>
       </div>
 
-      {/* ═══════════════ ROW 2 — QUATTRO + SOLAR (45%) ═══════════════ */}
-      <div style={{ flex: 45, display: "flex", gap: 5, minHeight: 0 }}>
-        {/* 2A: Quattro — all info + mode control */}
+      {/* ══ ROW 2 — QUATTRO + SOLAR (30%) ══ */}
+      <div style={{ flex: 38, display: "flex", gap: 4, minHeight: 0 }}>
+        {/* 2A: Quattro metrics */}
         <Card title="QUATTRO" icon="🔌" accent={C.amber}>
-          {/* Mode buttons */}
-          <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
-            {(["inverter", "charger", "passthrough", "off"] as const).map((m) => {
-              const cols: Record<string, string> = {
-                inverter: C.amber,
-                charger: C.green,
-                passthrough: C.blue,
-                off: C.dim,
-              }
-              const c = cols[m],
-                active = inv.mode === m
-              return (
-                <button
-                  key={m}
-                  onClick={() => setInvMode(m)}
-                  style={{
-                    flex: 1,
-                    padding: "4px 1px",
-                    borderRadius: 3,
-                    cursor: "pointer",
-                    background: active ? `${c}18` : "rgba(255,255,255,0.02)",
-                    border: `1px solid ${active ? c : "rgba(255,255,255,0.08)"}`,
-                    color: active ? c : C.faint,
-                    fontFamily: MONO,
-                    fontSize: 11,
-                    boxShadow: active ? `0 0 4px ${c}30` : "none",
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {m.charAt(0).toUpperCase() + m.slice(1)}
-                </button>
-              )
-            })}
-          </div>
-          <div style={{ fontSize: 12, color: C.faint, marginTop: 2, marginBottom: 2 }}>
-            State: <span style={{ color: C.text, fontFamily: MONO, fontWeight: 600 }}>{inv.state ?? "—"}</span>
-          </div>
-          {/* DC */}
-          <div
-            style={{
-              fontSize: 11,
-              color: C.amber,
-              letterSpacing: "0.15em",
-              borderBottom: `1px solid rgba(245,158,11,0.2)`,
-              paddingBottom: 2,
-              marginBottom: 2,
-            }}
-          >
-            DC
-          </div>
-          <R label="V" value={f1(inv.dcV)} unit="V" color={C.text} />
-          <R label="A" value={f1(inv.dcA)} unit="A" />
-          {/* AC IN */}
-          <div
-            style={{
-              fontSize: 11,
-              color: C.amber,
-              letterSpacing: "0.15em",
-              marginTop: 4,
-              borderBottom: `1px solid rgba(245,158,11,0.2)`,
-              paddingBottom: 2,
-              marginBottom: 2,
-            }}
-          >
-            AC IN (shore / gen)
-          </div>
-          <R label="V" value={f1(inv.acIV)} unit="V" color={C.text} />
-          <R label="W" value={f0(inv.acIW)} unit="W" color={C.green} />
-          {/* AC OUT */}
-          <div
-            style={{
-              fontSize: 11,
-              color: C.amber,
-              letterSpacing: "0.15em",
-              marginTop: 4,
-              borderBottom: `1px solid rgba(245,158,11,0.2)`,
-              paddingBottom: 2,
-              marginBottom: 2,
-            }}
-          >
-            AC OUT (load)
-          </div>
-          <R label="V" value={f1(inv.acOV)} unit="V" color={C.text} />
-          <R label="A" value={f1(inv.acOA)} unit="A" />
-          <R
-            label="W"
-            value={f0(inv.acOW)}
-            unit="W"
-            color={inv.acOW !== null && inv.acOW > TH_LOAD ? C.red : C.amber}
-          />
-        </Card>
-
-        {/* 2B: MPPT + forecast */}
-        <Card title="MPPT SOLAR" icon="☀️" accent={C.teal}>
-          {/* Big panel power */}
-          <div style={{ flexShrink: 0 }}>
-            <div style={{ fontSize: 11, color: C.faint, letterSpacing: "0.15em", marginBottom: 2 }}>PANEL POWER</div>
-            <div
-              style={{
-                fontSize: 26,
-                fontWeight: 700,
-                fontFamily: MONO,
-                color: sol.pW !== null && sol.pW > 0 ? C.teal : C.dim,
-              }}
-            >
-              {sol.pW !== null ? f0(sol.pW) : "—"}
-              <span style={{ fontSize: 14, color: C.faint }}> W</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <Sec label="DC" color={C.amber} />
+              <R label="V" value={f1(inv.dcV)} unit="V" color={C.text} />
+              <R label="A" value={f1(inv.dcA)} unit="A" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Sec label="AC IN" color={C.amber} />
+              <R label="V" value={f1(inv.acIV)} unit="V" color={C.text} />
+              <R label="W" value={f0(inv.acIW)} unit="W" color={C.green} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <Sec label="AC OUT" color={C.amber} />
+              <R label="V" value={f1(inv.acOV)} unit="V" color={C.text} />
+              <R label="A" value={f1(inv.acOA)} unit="A" />
+              <R
+                label="W"
+                value={f0(inv.acOW)}
+                unit="W"
+                color={inv.acOW !== null && inv.acOW > TH_LOAD ? C.red : C.amber}
+              />
             </div>
           </div>
-          <R label="Panel V" value={f1(sol.pV)} unit="V" color={C.text} />
-          <R label="Panel A" value={f1(sol.pA)} unit="A" color={C.teal} />
-          <R
-            label="Mode"
-            value={sol.mode ?? "—"}
-            color={
-              sol.mode === "float"
-                ? C.green
-                : sol.mode === "absorption"
-                  ? C.amber
-                  : sol.mode === "bulk"
-                    ? C.teal
-                    : C.dim
-            }
-          />
-          <R label="Yield today" value={sol.yWh !== null ? f0(sol.yWh) : "—"} unit="Wh" color={C.green} />
-          <div style={{ flex: 1, minHeight: 0, marginTop: 4 }}>
+          <div style={{ fontSize: 12, color: C.faint, marginTop: 2 }}>
+            Mode: <span style={{ color: C.text }}>{inv.mode ?? "—"}</span>
+            <span style={{ marginLeft: 10 }}>
+              State: <span style={{ color: C.text }}>{inv.state ?? "—"}</span>
+            </span>
+            {inv.chargingMode && (
+              <span style={{ marginLeft: 10 }}>
+                Charging: <span style={{ color: C.teal }}>{inv.chargingMode}</span>
+              </span>
+            )}
+          </div>
+        </Card>
+
+        {/* 2B: MPPT Solar */}
+        <Card title="MPPT SOLAR" icon="☀️" accent={C.teal}>
+          <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ fontSize: 11, color: C.faint, letterSpacing: "0.12em" }}>PANEL POWER</div>
+              <div
+                style={{
+                  fontSize: 34,
+                  fontWeight: 700,
+                  fontFamily: MONO,
+                  color: sol.pW !== null && sol.pW > 0 ? C.teal : C.dim,
+                }}
+              >
+                {sol.pW !== null ? f0(sol.pW) : "—"}
+                <span style={{ fontSize: 16, color: C.faint }}> W</span>
+              </div>
+            </div>
+            <div style={{ flex: 1 }}>
+              <R label="Panel V" value={f1(sol.pV)} unit="V" color={C.text} />
+              <R label="Panel A" value={f1(sol.pA)} unit="A" color={C.teal} />
+              <R
+                label="Mode"
+                value={sol.mode ?? "—"}
+                color={
+                  sol.mode === "float"
+                    ? C.green
+                    : sol.mode === "absorption"
+                      ? C.amber
+                      : sol.mode === "bulk"
+                        ? C.teal
+                        : C.dim
+                }
+              />
+              <R label="Yield" value={sol.yWh !== null ? f0(sol.yWh) : "—"} unit="Wh" color={C.green} />
+            </div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, marginTop: 3 }}>
             <FCBars fc={fc} posLat={posLat} />
           </div>
         </Card>
 
-        {/* 2C: Energy balance */}
+        {/* 2C: Energy Balance */}
         <Card title="ENERGY BALANCE" icon="⚖️" accent={C.teal}>
           {(() => {
             const solar = sol.pW ?? 0,
@@ -1034,21 +996,21 @@ export default function PowerView() {
                   { label: "Battery", val: bW, color: bW >= 0 ? C.green : C.red },
                 ].map(({ label, val, color }) => (
                   <div key={label} style={{ marginBottom: 5 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 2 }}>
                       <span style={{ fontSize: 13, color: C.dim, fontFamily: MONO }}>{label}</span>
-                      <span style={{ fontSize: 15, color, fontFamily: MONO, fontWeight: 600 }}>
-                        {f0(val)} <span style={{ fontSize: 11, color: C.faint }}>W</span>
+                      <span style={{ fontSize: 19, color, fontFamily: MONO, fontWeight: 600 }}>
+                        {f0(val)} <span style={{ fontSize: 13, color: C.faint }}>W</span>
                       </span>
                     </div>
-                    <div style={{ height: 6, background: "rgba(0,210,255,0.06)", borderRadius: 3 }}>
+                    <div style={{ height: 12, background: "rgba(0,210,255,0.06)", borderRadius: 4 }}>
                       <div
                         style={{
                           height: "100%",
-                          borderRadius: 2,
+                          borderRadius: 3,
                           transition: "width 0.5s",
                           width: `${Math.min(100, (Math.abs(val) / mx) * 100)}%`,
                           background: color,
-                          boxShadow: `0 0 4px ${color}60`,
+                          boxShadow: `0 0 4px ${color}50`,
                         }}
                       />
                     </div>
@@ -1056,22 +1018,90 @@ export default function PowerView() {
                 ))}
                 <div style={{ height: 1, background: C.border, margin: "3px 0" }} />
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{ fontSize: 13, color: C.dim, fontFamily: MONO }}>Net</span>
-                  <span style={{ fontSize: 22, fontWeight: 700, color: net >= 0 ? C.green : C.red, fontFamily: MONO }}>
+                  <span style={{ fontSize: 13, color: C.dim }}>Net</span>
+                  <span style={{ fontSize: 28, fontWeight: 700, color: net >= 0 ? C.green : C.red, fontFamily: MONO }}>
                     {net >= 0 ? "+" : ""}
                     {Math.round(net)} W
                   </span>
                 </div>
-                <div style={{ flex: 1 }} />
-                <div style={{ fontSize: 11, color: C.faint, lineHeight: 1.6 }}>
-                  Alarm thresholds: SoC &lt;{TH_SOC_LO}% · Cell Δ &gt;{TH_DELTA}mV · Load &gt;{TH_LOAD}W · Temp &gt;
-                  {TH_TEMP}°C
-                  <br />
-                  Edit in Settings → PowerView
-                </div>
               </>
             )
           })()}
+        </Card>
+      </div>
+
+      {/* ══ ROW 3 — CONTROLS (20%) ══ */}
+      <div style={{ flex: 22, display: "flex", gap: 4, minHeight: 0 }}>
+        {/* 3A: Quattro Controls */}
+        <Card title="QUATTRO CONTROLS" icon="🎛" accent={C.amber}>
+          <div style={{ fontSize: 11, color: C.faint, letterSpacing: "0.12em", marginBottom: 3 }}>
+            CHARGER / INVERTER MODE
+          </div>
+          <div style={{ display: "flex", gap: 3, flexShrink: 0 }}>
+            {QUATTRO_MODES.map(({ label, color }) => (
+              <ModeBtn
+                key={label}
+                label={label}
+                active={inv.mode === label}
+                color={color}
+                onClick={() => setMode(label)}
+              />
+            ))}
+          </div>
+          <div style={{ flex: 1 }} />
+          <ToggleBtn
+            label="Generator"
+            state={inv.genRelay}
+            onToggle={() => toggle("gen", PATH_GEN_RELAY, inv.genRelay)}
+            pending={!!pending.gen}
+            colorOn={C.green}
+          />
+        </Card>
+
+        {/* 3B: REC BMS Relays */}
+        <Card title="REC BMS RELAYS" icon="🔒" accent={C.teal}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 5, justifyContent: "space-evenly", height: "100%" }}
+          >
+            <ToggleBtn
+              label="Charge"
+              state={bat.recCharge}
+              onToggle={() => toggle("recCharge", PATH_REC_CHARGE, bat.recCharge)}
+              pending={!!pending.recCharge}
+              colorOn={C.green}
+              colorOff={C.red}
+            />
+            <ToggleBtn
+              label="Discharge"
+              state={bat.recDischarge}
+              onToggle={() => toggle("recDischarge", PATH_REC_DISCHARGE, bat.recDischarge)}
+              pending={!!pending.recDischarge}
+              colorOn={C.green}
+              colorOff={C.red}
+            />
+          </div>
+        </Card>
+
+        {/* 3C: BMV712 + Lynx */}
+        <Card title="SWITCHES" icon="🔀" accent={C.blue}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 5, justifyContent: "space-evenly", height: "100%" }}
+          >
+            <ToggleBtn
+              label="BMV712 Charge"
+              state={bat.bmvRelay}
+              onToggle={() => toggle("bmv", PATH_BMV_RELAY, bat.bmvRelay)}
+              pending={!!pending.bmv}
+              colorOn={C.green}
+            />
+            <ToggleBtn
+              label="Lynx CAN Shunt"
+              state={bat.lynxRelay}
+              onToggle={() => toggle("lynx", PATH_LYNX_RELAY, bat.lynxRelay)}
+              pending={!!pending.lynx}
+              colorOn={C.green}
+            />
+          </div>
         </Card>
       </div>
     </div>
