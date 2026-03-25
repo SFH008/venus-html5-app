@@ -6,12 +6,13 @@ import BackIcon from "../../../images/icons/back.svg"
 import { AppViews, useAppViewsStore } from "../../../modules/AppViews"
 import SwitchingPane from "../../views/SwitchingPane"
 
-// ── Nav items — add/remove/reorder here freely ─────────────────────────────
+// ── Nav items ─────────────────────────────────────────────────────────────────
 const NAV_ITEMS: { view: AppViews; icon: string; label: string }[] = [
   { view: AppViews.BOAT_OVERVIEW, icon: "🛥", label: "Vessel" },
   { view: AppViews.SWITCH_VIEW, icon: "🔌", label: "Switches" },
   { view: AppViews.POWER_VIEW, icon: "⚡", label: "Power" },
   { view: AppViews.WATERMAKER_VIEW, icon: "🌊", label: "Water" },
+  { view: AppViews.ALARM_VIEW, icon: "🔔", label: "Alarms" },
   { view: AppViews.WEATHER_VIEW, icon: "🌬", label: "Weather" },
   { view: AppViews.WEATHER_FORECAST, icon: "📈", label: "Forecast" },
   { view: AppViews.SETTINGS, icon: "⚙️", label: "Settings" },
@@ -22,9 +23,22 @@ const Footer = ({ pageSelectorProps }: Props) => {
   const current = appViewsStore.currentView
   const [isShowingBackButton, setIsShowingBackButton] = useState(current !== AppViews.ROOT)
 
+  // Active alarm count — read from window so AlarmView can publish it
+  const [alarmCount, setAlarmCount] = useState(0)
+
   useEffect(() => {
     setIsShowingBackButton(appViewsStore.currentView !== AppViews.ROOT)
   }, [appViewsStore.currentView])
+
+  // Listen for alarm count updates published by AlarmView
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const count = (e as CustomEvent<number>).detail ?? 0
+      setAlarmCount(count)
+    }
+    window.addEventListener("marine2_alarm_count", handler as EventListener)
+    return () => window.removeEventListener("marine2_alarm_count", handler as EventListener)
+  }, [])
 
   const handleBackClick = () => appViewsStore.setView(AppViews.ROOT)
 
@@ -45,13 +59,16 @@ const Footer = ({ pageSelectorProps }: Props) => {
         )}
       </div>
 
-      {/* Centre — SwitchingPane (keep existing) */}
+      {/* Centre — SwitchingPane */}
       <SwitchingPane />
 
-      {/* Right — smart nav bar */}
+      {/* Right — nav bar */}
       <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 2 }}>
         {NAV_ITEMS.map(({ view, icon, label }) => {
           const isActive = current === view
+          const isAlarm = view === AppViews.ALARM_VIEW
+          const hasAlarms = isAlarm && alarmCount > 0
+
           return (
             <div
               key={view}
@@ -68,8 +85,12 @@ const Footer = ({ pageSelectorProps }: Props) => {
                 borderRadius: 6,
                 padding: "2px 4px",
                 position: "relative",
-                background: isActive ? "rgba(0, 177, 255, 0.12)" : "transparent",
-                border: isActive ? "1px solid rgba(0, 177, 255, 0.35)" : "1px solid transparent",
+                background: isActive ? "rgba(0, 177, 255, 0.12)" : hasAlarms ? "rgba(248,113,113,0.08)" : "transparent",
+                border: isActive
+                  ? "1px solid rgba(0, 177, 255, 0.35)"
+                  : hasAlarms
+                    ? "1px solid rgba(248,113,113,0.4)"
+                    : "1px solid transparent",
                 transition: "all 0.15s ease",
               }}
             >
@@ -88,17 +109,47 @@ const Footer = ({ pageSelectorProps }: Props) => {
                   }}
                 />
               )}
+
+              {/* Alarm count badge */}
+              {hasAlarms && !isActive && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 2,
+                    right: 4,
+                    minWidth: 16,
+                    height: 16,
+                    borderRadius: 8,
+                    background: "#ef4444",
+                    border: "1px solid #ff6666",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
+                    fontFamily: "monospace",
+                    color: "#fff",
+                    fontWeight: 700,
+                    boxShadow: "0 0 6px #ef444488",
+                    padding: "0 3px",
+                    zIndex: 2,
+                  }}
+                >
+                  {alarmCount}
+                </div>
+              )}
+
               {/* Icon */}
               <span
                 style={{
                   fontSize: 22,
                   lineHeight: 1,
-                  filter: isActive ? "none" : "grayscale(0.3) opacity(0.6)",
+                  filter: isActive ? "none" : hasAlarms ? "none" : "grayscale(0.3) opacity(0.6)",
                   transition: "filter 0.15s ease",
                 }}
               >
                 {icon}
               </span>
+
               {/* Label */}
               <span
                 style={{
@@ -106,7 +157,7 @@ const Footer = ({ pageSelectorProps }: Props) => {
                   marginTop: 2,
                   letterSpacing: "0.05em",
                   textTransform: "uppercase",
-                  color: isActive ? "#00b1ff" : "rgba(150,170,200,0.5)",
+                  color: isActive ? "#00b1ff" : hasAlarms ? "#f87171" : "rgba(150,170,200,0.5)",
                   fontFamily: "monospace",
                   whiteSpace: "nowrap",
                   transition: "color 0.15s ease",
@@ -119,7 +170,7 @@ const Footer = ({ pageSelectorProps }: Props) => {
         })}
       </div>
 
-      {/* Far right — settings */}
+      {/* Far right — settings menu */}
       <SettingsMenu />
     </div>
   )

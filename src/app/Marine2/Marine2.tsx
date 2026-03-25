@@ -12,6 +12,7 @@ import ErrorFallback from "./components/ui/Error"
 import BoatOverviewView from "./components/views/BoatOverviewView"
 import DigitalSwitchingView from "./components/views/DigitalSwitchingView"
 import WeatherView from "./components/views/WeatherView"
+import AlarmView from "./components/views/AlarmView"
 import WeatherForecastView from "./components/views/WeatherForecastView"
 import WatermakerView from "./components/views/WatermakerView"
 import SystemOverviewView from "./components/views/SystemOverviewView"
@@ -82,6 +83,12 @@ export const Marine2 = observer((props: AppProps) => {
         return (
           <MainLayout>
             <SystemOverviewView />
+          </MainLayout>
+        )
+      case AppViews.ALARM_VIEW:
+        return (
+          <MainLayout>
+            <AlarmView />
           </MainLayout>
         )
       case AppViews.SETTINGS:
