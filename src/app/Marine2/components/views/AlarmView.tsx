@@ -1,9 +1,6 @@
 /**
  * AlarmView.tsx
  * SignalK Notifications / Alarm panel for Marine2 dashboard.
- *
- * Data source: SignalK REST API v2 (polling) + WebSocket for live updates
- * Actions: SK v2 notifications API (silence/acknowledge/clear), fallback to Node-RED
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
@@ -14,8 +11,8 @@ const SK_HOST = `http://${cfg.signalkHost}:${cfg.signalkPort}`
 const SK_WS = `ws://${cfg.signalkHost}:${cfg.signalkPort}/signalk/v1/stream?subscribe=none`
 const NR_HOST = `http://${cfg.signalkHost}:${cfg.nodeRedPort}`
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
 type AlarmState = "emergency" | "alarm" | "warn" | "alert" | "normal" | "nominal"
+type AlarmSeverity = "none" | "warn" | "alarm" | "emergency"
 
 interface NotifStatus {
   silenced: boolean
@@ -35,7 +32,6 @@ interface Notification {
   status?: NotifStatus
 }
 
-// ─── STYLES ──────────────────────────────────────────────────────────────────
 const STATE_COLOR: Record<AlarmState, { text: string; bg: string; border: string; glow: string }> = {
   emergency: { text: "#ff4444", bg: "#1a0000", border: "#ff444488", glow: "0 0 12px #ff444466" },
   alarm: { text: "#f87171", bg: "#1e0808", border: "#f8717188", glow: "0 0 10px #f8717144" },
@@ -102,7 +98,6 @@ const styles = `
   .av-pulse{animation:pulseAlert 1.5s ease-in-out infinite}
 `
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
 function formatPath(path: string): string {
   return path.replace(/^notifications\./, "").replace(/\./g, " › ")
 }
@@ -126,7 +121,6 @@ function sortNotifs(list: Notification[]): Notification[] {
   })
 }
 
-// ─── API ─────────────────────────────────────────────────────────────────────
 async function skAction(id: string, action: "silence" | "acknowledge" | "clear"): Promise<boolean> {
   try {
     const res = await fetch(`${SK_HOST}/signalk/v2/api/notifications/${id}/${action}`, {
@@ -135,9 +129,8 @@ async function skAction(id: string, action: "silence" | "acknowledge" | "clear")
     })
     if (res.ok) return true
   } catch {
-    /* fall through to Node-RED */
+    /* fall through */
   }
-
   try {
     const res = await fetch(`${NR_HOST}/alarm-action`, {
       method: "POST",
@@ -154,12 +147,10 @@ async function skAction(id: string, action: "silence" | "acknowledge" | "clear")
 function parseNotifTree(tree: any, prefix = "notifications"): Notification[] {
   const results: Notification[] = []
   if (!tree || typeof tree !== "object") return results
-
   if (tree.value && typeof tree.value === "object" && "state" in tree.value) {
     const v = tree.value
-    const id = tree.value.id ?? prefix
     results.push({
-      id,
+      id: v.id ?? prefix,
       path: prefix,
       state: v.state ?? "normal",
       method: Array.isArray(v.method) ? v.method : [],
@@ -169,9 +160,8 @@ function parseNotifTree(tree: any, prefix = "notifications"): Notification[] {
     })
     return results
   }
-
   for (const key of Object.keys(tree)) {
-    if (key === "value" || key === "timestamp" || key === "$source" || key === "pgn" || key === "src") continue
+    if (["value", "timestamp", "$source", "pgn", "src"].includes(key)) continue
     const child = tree[key]
     if (child && typeof child === "object") {
       results.push(...parseNotifTree(child, `${prefix}.${key}`))
@@ -180,7 +170,21 @@ function parseNotifTree(tree: any, prefix = "notifications"): Notification[] {
   return results
 }
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
+function dispatchAlarmEvents(list: Notification[]) {
+  const active = list.filter((n) => n.state !== "normal" && n.state !== "nominal")
+  const activeCount = active.length
+  const severity: AlarmSeverity = active.some((n) => n.state === "emergency")
+    ? "emergency"
+    : active.some((n) => n.state === "alarm")
+      ? "alarm"
+      : active.some((n) => n.state === "warn")
+        ? "warn"
+        : "none"
+  const worstMessage = sortNotifs(active)[0]?.message ?? ""
+  window.dispatchEvent(new CustomEvent("marine2_alarm_count", { detail: activeCount }))
+  window.dispatchEvent(new CustomEvent("marine2_alarm_severity", { detail: { severity, message: worstMessage } }))
+}
+
 type FilterType = "all" | "active" | "emergency" | "alarm" | "warn"
 
 const AlarmView: React.FC = () => {
@@ -200,7 +204,6 @@ const AlarmView: React.FC = () => {
       if (!res.ok) return
       const tree = await res.json()
       const list = parseNotifTree(tree)
-
       try {
         const res2 = await fetch(`${SK_HOST}/signalk/v2/api/notifications`, {
           signal: AbortSignal.timeout(3000),
@@ -218,17 +221,11 @@ const AlarmView: React.FC = () => {
       } catch {
         /* v2 optional */
       }
-
       const map = new Map<string, Notification>()
       for (const n of list) map.set(n.path, n)
       notifsRef.current = map
-
-      const sorted = sortNotifs(list)
-      setNotifs(sorted)
-
-      // Publish active count for Footer badge
-      const activeCount = list.filter((n) => n.state !== "normal" && n.state !== "nominal").length
-      window.dispatchEvent(new CustomEvent("marine2_alarm_count", { detail: activeCount }))
+      setNotifs(sortNotifs(list))
+      dispatchAlarmEvents(list)
     } catch {
       /* ignore */
     }
@@ -241,7 +238,6 @@ const AlarmView: React.FC = () => {
     }
     const ws = new WebSocket(SK_WS)
     wsRef.current = ws
-
     ws.onopen = () => {
       setConnected(true)
       ws.send(
@@ -251,23 +247,18 @@ const AlarmView: React.FC = () => {
         }),
       )
     }
-
     ws.onmessage = (evt) => {
       try {
         const msg = JSON.parse(evt.data)
         if (!msg.updates) return
         let changed = false
-        for (const update of msg.updates) {
-          for (const val of update.values || []) {
-            if (val.path.startsWith("notifications.")) changed = true
-          }
-        }
+        for (const update of msg.updates)
+          for (const val of update.values || []) if (val.path.startsWith("notifications.")) changed = true
         if (changed) pollNotifs()
       } catch {
         /* ignore */
       }
     }
-
     ws.onerror = () => setConnected(false)
     ws.onclose = () => {
       setConnected(false)
@@ -277,10 +268,10 @@ const AlarmView: React.FC = () => {
 
   useEffect(() => {
     pollNotifs()
-    const pollInterval = setInterval(pollNotifs, 10000)
+    const interval = setInterval(pollNotifs, 10000)
     connectWs()
     return () => {
-      clearInterval(pollInterval)
+      clearInterval(interval)
       if (reconnectRef.current) clearTimeout(reconnectRef.current)
       if (wsRef.current) {
         wsRef.current.onclose = null
@@ -314,14 +305,12 @@ const AlarmView: React.FC = () => {
       <style>{styles}</style>
       <div className="av-root">
         <div className="av-content">
-          {/* Header */}
           <div className="av-header">
             <div className={`av-title ${hasEmergency ? "av-pulse" : ""}`}>🔔 Alarms</div>
             <span className="av-badge av-count">{activeCount} active</span>
             <span className={`av-badge av-conn ${connected ? "ok" : "err"}`}>{connected ? "LIVE" : "OFFLINE"}</span>
           </div>
 
-          {/* Filters */}
           <div className="av-filters">
             {(["active", "all", "emergency", "alarm", "warn"] as FilterType[]).map((f) => (
               <button key={f} className={`av-filter ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
@@ -330,7 +319,6 @@ const AlarmView: React.FC = () => {
             ))}
           </div>
 
-          {/* List */}
           {filtered.length === 0 ? (
             <div className="av-empty">
               <div className="av-empty-icon">✓</div>
@@ -349,7 +337,6 @@ const AlarmView: React.FC = () => {
                 const canClear = notif.status?.canClear ?? false
                 const isSilenced = notif.status?.silenced ?? false
                 const isAcknowledged = notif.status?.acknowledged ?? false
-
                 return (
                   <div
                     key={notif.path}
@@ -380,7 +367,6 @@ const AlarmView: React.FC = () => {
                         </div>
                       </div>
                     </div>
-
                     {(canSilence || canAcknowledge || canClear) && (
                       <div className="av-actions">
                         {canSilence && !isSilenced && (

@@ -1,14 +1,9 @@
 /**
  * SettingsView.tsx
- * Marine2 Settings — edit Network and Display config on the Axiom touchscreen.
+ * Marine2 Settings — edit all configuration on the Axiom touchscreen.
  *
  * Settings are persisted to localStorage and survive browser reload.
  * All views pick up changes immediately via useAppConfig() hook.
- *
- * Integration:
- *   1. Add SETTINGS = "settings" to AppViews.store.ts enum
- *   2. Import and add case to renderView() in Marine2.tsx
- *   3. Add nav item to Footer.tsx: { view: AppViews.SETTINGS, icon: "⚙", label: "Settings" }
  */
 
 import React, { useState, useCallback } from "react"
@@ -16,7 +11,6 @@ import { useAppConfig } from "../../config/useAppConfig"
 import { CONFIG_DEFAULTS } from "../../config/AppConfig"
 import type { AppConfigShape } from "../../config/AppConfig"
 
-// ─── STYLES ──────────────────────────────────────────────────────────────────
 const C = {
   bg: "#000509",
   panel: "rgba(0,8,20,0.88)",
@@ -35,6 +29,7 @@ const C = {
 }
 
 // ─── FIELD COMPONENTS ────────────────────────────────────────────────────────
+
 const FieldLabel = ({ label, hint }: { label: string; hint?: string }) => (
   <div style={{ marginBottom: 8 }}>
     <div style={{ fontSize: 14, color: C.accent, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 600 }}>
@@ -47,6 +42,20 @@ const FieldLabel = ({ label, hint }: { label: string; hint?: string }) => (
     )}
   </div>
 )
+
+const inputStyle = {
+  width: "100%",
+  boxSizing: "border-box" as const,
+  background: "rgba(0,0,0,0.5)",
+  border: `1px solid ${C.borderHi}`,
+  borderRadius: 8,
+  padding: "14px 16px",
+  fontSize: 17,
+  color: C.text,
+  fontFamily: C.mono,
+  outline: "none",
+  letterSpacing: "0.06em",
+}
 
 const TextInput = ({
   value,
@@ -62,19 +71,7 @@ const TextInput = ({
     value={value}
     onChange={(e) => onChange(e.target.value)}
     placeholder={placeholder}
-    style={{
-      width: "100%",
-      boxSizing: "border-box",
-      background: "rgba(0,0,0,0.5)",
-      border: `1px solid ${C.borderHi}`,
-      borderRadius: 8,
-      padding: "14px 16px",
-      fontSize: 17,
-      color: C.text,
-      fontFamily: C.mono,
-      outline: "none",
-      letterSpacing: "0.06em",
-    }}
+    style={inputStyle}
   />
 )
 
@@ -92,19 +89,7 @@ const PasswordInput = ({
     value={value}
     onChange={(e) => onChange(e.target.value)}
     placeholder={placeholder}
-    style={{
-      width: "100%",
-      boxSizing: "border-box",
-      background: "rgba(0,0,0,0.5)",
-      border: `1px solid ${C.borderHi}`,
-      borderRadius: 8,
-      padding: "14px 16px",
-      fontSize: 17,
-      color: C.text,
-      fontFamily: C.mono,
-      outline: "none",
-      letterSpacing: "0.06em",
-    }}
+    style={inputStyle}
   />
 )
 
@@ -134,19 +119,7 @@ const NumberInput = ({
         const n = parseFloat(e.target.value)
         if (!isNaN(n)) onChange(n)
       }}
-      style={{
-        flex: 1,
-        boxSizing: "border-box",
-        background: "rgba(0,0,0,0.5)",
-        border: `1px solid ${C.borderHi}`,
-        borderRadius: 8,
-        padding: "14px 16px",
-        fontSize: 17,
-        color: C.text,
-        fontFamily: C.mono,
-        outline: "none",
-        letterSpacing: "0.06em",
-      }}
+      style={{ ...inputStyle, flex: 1 }}
     />
     {unit && <span style={{ fontSize: 14, color: C.textDim, fontFamily: C.mono, minWidth: 28 }}>{unit}</span>}
   </div>
@@ -196,7 +169,6 @@ const SliderInput = ({
   </div>
 )
 
-// ─── SECTION ─────────────────────────────────────────────────────────────────
 const Section = ({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) => (
   <div
     style={{
@@ -229,7 +201,6 @@ const Section = ({ title, icon, children }: { title: string; icon: string; child
   </div>
 )
 
-// FieldRow: label on top (full width), input below — better for narrow screens
 const FieldRow = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
     <FieldLabel label={label} hint={hint} />
@@ -237,7 +208,52 @@ const FieldRow = ({ label, hint, children }: { label: string; hint?: string; chi
   </div>
 )
 
-// ─── FONT PREVIEW ─────────────────────────────────────────────────────────────
+const Hint = ({ children }: { children: React.ReactNode }) => (
+  <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>{children}</div>
+)
+
+const InfoBox = ({ children }: { children: React.ReactNode }) => (
+  <div
+    style={{
+      padding: "10px 12px",
+      background: "rgba(0,210,255,0.03)",
+      border: `1px solid ${C.border}`,
+      borderRadius: 6,
+    }}
+  >
+    <div style={{ fontSize: 13, color: C.textDim, letterSpacing: "0.03em", lineHeight: 1.9 }}>{children}</div>
+  </div>
+)
+
+const WarnBox = ({ children }: { children: React.ReactNode }) => (
+  <div
+    style={{
+      padding: "8px 12px",
+      marginBottom: 12,
+      background: "rgba(251,191,36,0.05)",
+      border: "1px solid rgba(251,191,36,0.2)",
+      borderRadius: 6,
+    }}
+  >
+    <div style={{ fontSize: 12, color: "rgba(251,191,36,0.8)", lineHeight: 1.8 }}>{children}</div>
+  </div>
+)
+
+const SubHeader = ({ children }: { children: React.ReactNode }) => (
+  <div
+    style={{
+      marginTop: 8,
+      marginBottom: 4,
+      fontSize: 11,
+      color: C.textDim,
+      letterSpacing: "0.08em",
+      textTransform: "uppercase" as const,
+    }}
+  >
+    {children}
+  </div>
+)
+
 const FontPreview = ({ scale }: { scale: number }) => {
   const fs = (b: number) => Math.round(b * scale)
   return (
@@ -266,7 +282,6 @@ const FontPreview = ({ scale }: { scale: number }) => {
   )
 }
 
-// ─── TOAST ────────────────────────────────────────────────────────────────────
 const Toast = ({ message, type }: { message: string; type: "success" | "error" }) => (
   <div
     style={{
@@ -291,7 +306,6 @@ const Toast = ({ message, type }: { message: string; type: "success" | "error" }
   </div>
 )
 
-// ─── DIFF HELPER ──────────────────────────────────────────────────────────────
 function hasChanges(draft: AppConfigShape, saved: AppConfigShape): boolean {
   return (Object.keys(draft) as Array<keyof AppConfigShape>).some((k) => draft[k] !== saved[k])
 }
@@ -325,11 +339,11 @@ const SettingsView = () => {
       return
     }
     if (draft.signalkPort < 1 || draft.signalkPort > 65535) {
-      showToast("SignalK port must be between 1–65535", "error")
+      showToast("SignalK port must be 1–65535", "error")
       return
     }
     if (draft.nodeRedPort < 1 || draft.nodeRedPort > 65535) {
-      showToast("Node-RED port must be between 1–65535", "error")
+      showToast("Node-RED port must be 1–65535", "error")
       return
     }
     if (!draft.alarmPath.trim().startsWith("/")) {
@@ -362,9 +376,8 @@ const SettingsView = () => {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Share+Tech+Mono&display=swap');
-        @keyframes blink     { 0%,100%{opacity:1} 50%{opacity:0.2} }
-        @keyframes fadeInUp  { from{opacity:0;transform:translateX(-50%) translateY(8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
-        @keyframes scanLine  { from{top:0} to{top:100%} }
+        @keyframes fadeInUp { from{opacity:0;transform:translateX(-50%) translateY(8px)} to{opacity:1;transform:translateX(-50%) translateY(0)} }
+        @keyframes scanLine { from{top:0} to{top:100%} }
         input[type=range]::-webkit-slider-thumb { width:18px; height:18px; }
         input::placeholder { color: rgba(200,220,255,0.2); }
         input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
@@ -397,7 +410,7 @@ const SettingsView = () => {
           }}
         />
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -421,7 +434,7 @@ const SettingsView = () => {
           </div>
         </div>
 
-        {/* ── Content ── */}
+        {/* Scrollable content */}
         <div
           style={{
             flex: 1,
@@ -433,49 +446,57 @@ const SettingsView = () => {
           }}
         >
           {/* ── Network ── */}
-          <Section title="Network" icon="🌐">
+          <Section title="Network — SignalK" icon="🌐">
             <FieldRow label="SignalK Host" hint="IP address of the SignalK server (NUC)">
               <TextInput
                 value={draft.signalkHost}
                 onChange={(v) => update("signalkHost", v)}
                 placeholder={CONFIG_DEFAULTS.signalkHost}
               />
-              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>Default: {CONFIG_DEFAULTS.signalkHost}</div>
+              <Hint>Default: {CONFIG_DEFAULTS.signalkHost}</Hint>
             </FieldRow>
             <FieldRow label="SignalK Port" hint="WebSocket port (typically 3000)">
               <NumberInput value={draft.signalkPort} onChange={(v) => update("signalkPort", v)} min={1} max={65535} />
-              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>Default: {CONFIG_DEFAULTS.signalkPort}</div>
+              <Hint>Default: {CONFIG_DEFAULTS.signalkPort}</Hint>
             </FieldRow>
-            <div
-              style={{
-                padding: "10px 12px",
-                background: "rgba(0,210,255,0.03)",
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-              }}
-            >
-              <div style={{ fontSize: 13, color: C.textDim, letterSpacing: "0.03em", lineHeight: 1.9 }}>
-                WebSocket:{" "}
-                <span style={{ color: C.textDim }}>
-                  ws://{draft.signalkHost}:{draft.signalkPort}/signalk/v1/stream
-                </span>
-                <br />
-                REST API:{" "}
-                <span style={{ color: C.textDim }}>
-                  http://{draft.signalkHost}:{draft.signalkPort}/signalk/v1/api/
-                </span>
-              </div>
-            </div>
+            <InfoBox>
+              WebSocket: ws://{draft.signalkHost}:{draft.signalkPort}/signalk/v1/stream
+              <br />
+              REST API: http://{draft.signalkHost}:{draft.signalkPort}/signalk/v1/api/
+            </InfoBox>
+          </Section>
+
+          {/* ── Node-RED ── */}
+          <Section title="Network — Node-RED" icon="🔴">
+            <FieldRow label="Node-RED Port" hint="Node-RED HTTP port (typically 1880)">
+              <NumberInput value={draft.nodeRedPort} onChange={(v) => update("nodeRedPort", v)} min={1} max={65535} />
+              <Hint>Default: {CONFIG_DEFAULTS.nodeRedPort}</Hint>
+            </FieldRow>
+            <FieldRow label="Alarm Webhook Path" hint="HTTP endpoint for alarm actions fallback (must start with /)">
+              <TextInput
+                value={draft.alarmPath}
+                onChange={(v) => update("alarmPath", v)}
+                placeholder={CONFIG_DEFAULTS.alarmPath}
+              />
+              <Hint>Default: {CONFIG_DEFAULTS.alarmPath}</Hint>
+            </FieldRow>
+            <InfoBox>
+              Node-RED base: http://{draft.signalkHost}:{draft.nodeRedPort}
+              <br />
+              Alarm webhook: http://{draft.signalkHost}:{draft.nodeRedPort}
+              {draft.alarmPath}
+            </InfoBox>
           </Section>
 
           {/* ── Yarrboard ── */}
-          <Section title="Yarrboard" icon="⚡">
-            <FieldRow label="Yarrboard Host" hint="Hostname or IP of the Yarrboard DC power controller">
+          <Section title="Yarrboard — Watermaker" icon="🌊">
+            <FieldRow label="Yarrboard Host" hint="Hostname or IP of the Brineomatic Yarrboard">
               <TextInput
                 value={draft.yarrboardHost}
                 onChange={(v) => update("yarrboardHost", v)}
                 placeholder={CONFIG_DEFAULTS.yarrboardHost}
               />
+              <Hint>Default: {CONFIG_DEFAULTS.yarrboardHost}</Hint>
             </FieldRow>
             <FieldRow label="Username" hint="Yarrboard API username">
               <TextInput value={draft.yarrboardUser} onChange={(v) => update("yarrboardUser", v)} placeholder="admin" />
@@ -487,134 +508,101 @@ const SettingsView = () => {
                 placeholder="••••••"
               />
             </FieldRow>
+            <InfoBox>API endpoint: http://{draft.yarrboardHost}/api/endpoint</InfoBox>
           </Section>
 
           {/* ── Alarms ── */}
-          <Section title="Alarms" icon="🔔">
-            <FieldRow
-              label="Notification Path"
-              hint="SignalK notifications tree prefix — must start with 'notifications.'"
-            >
+          <Section title="Alarms — Notifications" icon="🔔">
+            <FieldRow label="Notification Path Prefix" hint="SignalK notifications tree prefix for Marine2 alarms">
               <TextInput
                 value={draft.notifPrefix}
                 onChange={(v) => update("notifPrefix", v)}
                 placeholder={CONFIG_DEFAULTS.notifPrefix}
               />
-              <div style={{ fontSize: 13, color: C.textDim, marginTop: 8 }}>
-                Alarms are written to:{" "}
-                <span style={{ color: C.text }}>
-                  {draft.signalkHost}:{draft.signalkPort}/signalk/v1/api/vessels/self/
-                  {draft.notifPrefix.split(".").join("/")}/[id]
-                </span>
-              </div>
+              <Hint>
+                Alarms written to: {draft.signalkHost}:{draft.signalkPort}/signalk/v1/api/vessels/self/
+                {draft.notifPrefix.split(".").join("/")}/[id]
+              </Hint>
             </FieldRow>
 
-            <FieldRow label="Emergency repeat" hint="Seconds between repeated announcements (0 = no repeat)">
+            <FieldRow label="Emergency repeat interval" hint="Seconds between repeated announcements (0 = no repeat)">
               <NumberInput
                 value={draft.repeatEmergency}
                 onChange={(v) => update("repeatEmergency", v)}
                 min={0}
                 max={300}
+                unit="s"
               />
             </FieldRow>
-            <FieldRow label="Alarm repeat" hint="Seconds between repeated announcements (0 = no repeat)">
-              <NumberInput value={draft.repeatAlarm} onChange={(v) => update("repeatAlarm", v)} min={0} max={600} />
+            <FieldRow label="Alarm repeat interval" hint="Seconds between repeated announcements (0 = no repeat)">
+              <NumberInput
+                value={draft.repeatAlarm}
+                onChange={(v) => update("repeatAlarm", v)}
+                min={0}
+                max={600}
+                unit="s"
+              />
             </FieldRow>
 
-            <div
-              style={{
-                marginTop: 12,
-                marginBottom: 4,
-                fontSize: 13,
-                color: C.textDim,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-              }}
-            >
-              Speaker volumes (0–100)
-            </div>
-            <FieldRow label="Emergency" hint="Volume for emergency announcements">
-              <SliderInput
+            <SubHeader>Speaker volumes (0–100)</SubHeader>
+            <FieldRow label="Emergency volume">
+              <NumberInput
                 value={draft.volEmergency}
                 onChange={(v) => update("volEmergency", v)}
                 min={0}
                 max={100}
                 step={5}
-                labels={["0", "50", "100"]}
+                unit="%"
               />
             </FieldRow>
-            <FieldRow label="Alarm" hint="Volume for alarm announcements">
-              <SliderInput
+            <FieldRow label="Alarm volume">
+              <NumberInput
                 value={draft.volAlarm}
                 onChange={(v) => update("volAlarm", v)}
                 min={0}
                 max={100}
                 step={5}
-                labels={["0", "50", "100"]}
+                unit="%"
               />
             </FieldRow>
-            <FieldRow label="Warning" hint="Volume for warning announcements">
-              <SliderInput
+            <FieldRow label="Warning volume">
+              <NumberInput
                 value={draft.volWarn}
                 onChange={(v) => update("volWarn", v)}
                 min={0}
                 max={100}
                 step={5}
-                labels={["0", "50", "100"]}
+                unit="%"
               />
             </FieldRow>
-            <FieldRow label="Normal" hint="Volume for informational announcements">
-              <SliderInput
+            <FieldRow label="Normal volume">
+              <NumberInput
                 value={draft.volNormal}
                 onChange={(v) => update("volNormal", v)}
                 min={0}
                 max={100}
                 step={5}
-                labels={["0", "50", "100"]}
+                unit="%"
               />
             </FieldRow>
 
-            <div
-              style={{
-                marginTop: 8,
-                padding: "10px 12px",
-                background: "rgba(0,210,255,0.03)",
-                border: `1px solid ${C.border}`,
-                borderRadius: 6,
-              }}
-            >
-              <div style={{ fontSize: 13, color: C.textDim, lineHeight: 2.0 }}>
-                <span style={{ color: "#ef4444" }}>Emergency</span> — repeat every {draft.repeatEmergency}s · vol{" "}
-                {draft.volEmergency}%<br />
-                <span style={{ color: "#f97316" }}>Alarm</span> — repeat every {draft.repeatAlarm}s · vol{" "}
-                {draft.volAlarm}%<br />
-                <span style={{ color: "#fbbf24" }}>Warning</span> — once only · vol {draft.volWarn}%<br />
-                <span style={{ color: "#38bdf8" }}>Normal</span> — once only · vol {draft.volNormal}%
-              </div>
-            </div>
+            <InfoBox>
+              <span style={{ color: "#ef4444" }}>Emergency</span> — repeat every {draft.repeatEmergency}s · vol{" "}
+              {draft.volEmergency}%<br />
+              <span style={{ color: "#f97316" }}>Alarm</span> — repeat every {draft.repeatAlarm}s · vol {draft.volAlarm}
+              %<br />
+              <span style={{ color: "#fbbf24" }}>Warning</span> — once only · vol {draft.volWarn}%<br />
+              <span style={{ color: "#38bdf8" }}>Normal</span> — once only · vol {draft.volNormal}%
+            </InfoBox>
           </Section>
 
           {/* ── PowerView ── */}
           <Section title="PowerView — Device Paths" icon="⚡">
-            <div
-              style={{
-                padding: "8px 12px",
-                marginBottom: 12,
-                background: "rgba(251,191,36,0.05)",
-                border: "1px solid rgba(251,191,36,0.2)",
-                borderRadius: 6,
-              }}
-            >
-              <div style={{ fontSize: 12, color: "rgba(251,191,36,0.8)", lineHeight: 1.8 }}>
-                signalk-venus-plugin uses numeric Cerbo GX D-Bus instance IDs in paths.
-                <br />
-                Check{" "}
-                <span style={{ color: C.text }}>
-                  http://{draft.signalkHost}:{draft.signalkPort}/admin/#/databroker
-                </span>{" "}
-                to find your actual paths.
-              </div>
-            </div>
+            <WarnBox>
+              signalk-venus-plugin uses numeric Cerbo GX D-Bus instance IDs in paths. Check http://{draft.signalkHost}:
+              {draft.signalkPort}/admin/#/databroker to find your actual paths.
+            </WarnBox>
+
             <FieldRow label="Battery path" hint="SignalK path for house battery bank (BMV712 + REC BMS)">
               <TextInput
                 value={draft.pvBatteryPath}
@@ -636,10 +624,7 @@ const SettingsView = () => {
                 placeholder="electrical.inverters.288"
               />
             </FieldRow>
-            <FieldRow
-              label="BMV712 relay path"
-              hint="SignalK switch path for BMV712 aux relay (set to manual in VictronConnect first)"
-            >
+            <FieldRow label="BMV712 relay path" hint="SignalK switch path for BMV712 aux relay">
               <TextInput
                 value={draft.pvBmvRelayPath}
                 onChange={(v) => update("pvBmvRelayPath", v)}
@@ -653,9 +638,8 @@ const SettingsView = () => {
                 placeholder="ws://192.168.76.x:8080"
               />
             </FieldRow>
-            <div style={{ marginTop: 8, marginBottom: 4, fontSize: 11, color: C.textDim, letterSpacing: "0.08em" }}>
-              ALARM THRESHOLDS
-            </div>
+
+            <SubHeader>Alarm thresholds</SubHeader>
             <FieldRow label="Low SoC alarm" hint="Fire alarm when battery SoC falls below this value">
               <NumberInput
                 value={draft.pvAlarmSocLow}
@@ -666,7 +650,7 @@ const SettingsView = () => {
                 unit="%"
               />
             </FieldRow>
-            <FieldRow label="High SoC warn" hint="Fire warning when SoC exceeds this (overcharge / float damage risk)">
+            <FieldRow label="High SoC warning" hint="Fire warning when SoC exceeds this">
               <NumberInput
                 value={draft.pvAlarmSocHigh}
                 onChange={(v) => update("pvAlarmSocHigh", v)}
@@ -676,7 +660,7 @@ const SettingsView = () => {
                 unit="%"
               />
             </FieldRow>
-            <FieldRow label="Cell delta warn" hint="Fire warning when REC BMS cell spread exceeds this value">
+            <FieldRow label="Cell delta warning" hint="Fire warning when REC BMS cell spread exceeds this">
               <NumberInput
                 value={draft.pvAlarmCellDelta}
                 onChange={(v) => update("pvAlarmCellDelta", v)}
@@ -686,7 +670,7 @@ const SettingsView = () => {
                 unit="mV"
               />
             </FieldRow>
-            <FieldRow label="Load limit warn" hint="Fire warning when Quattro AC output exceeds this wattage">
+            <FieldRow label="Load limit warning" hint="Fire warning when Quattro AC output exceeds this">
               <NumberInput
                 value={draft.pvAlarmLoadWatts}
                 onChange={(v) => update("pvAlarmLoadWatts", v)}
@@ -696,7 +680,7 @@ const SettingsView = () => {
                 unit="W"
               />
             </FieldRow>
-            <FieldRow label="Battery temp alarm" hint="Fire alarm when battery temperature exceeds this value">
+            <FieldRow label="Battery temp alarm" hint="Fire alarm when battery temperature exceeds this">
               <NumberInput
                 value={draft.pvAlarmTempHigh}
                 onChange={(v) => update("pvAlarmTempHigh", v)}
@@ -724,7 +708,7 @@ const SettingsView = () => {
           </Section>
         </div>
 
-        {/* ── Action bar ── */}
+        {/* Action bar */}
         <div
           style={{
             flexShrink: 0,
@@ -735,7 +719,6 @@ const SettingsView = () => {
             background: "rgba(0,4,12,0.95)",
           }}
         >
-          {/* Reset */}
           <button
             onClick={handleReset}
             style={{
@@ -752,8 +735,6 @@ const SettingsView = () => {
           >
             ↺ Reset to Defaults
           </button>
-
-          {/* Discard */}
           <button
             onClick={handleDiscard}
             style={{
@@ -770,10 +751,7 @@ const SettingsView = () => {
           >
             ✕ Discard Changes
           </button>
-
           <div style={{ flex: 1 }} />
-
-          {/* Save */}
           <button
             onClick={handleSave}
             style={{
@@ -794,7 +772,6 @@ const SettingsView = () => {
           </button>
         </div>
 
-        {/* Toast */}
         {toast && <Toast message={toast.message} type={toast.type} />}
       </div>
     </>
