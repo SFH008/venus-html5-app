@@ -229,45 +229,51 @@ class MqttWsClient {
       this.ws.binaryType = "arraybuffer"
 
       this.ws.onopen = () => {
-        // Send MQTT CONNECT packet
         const clientId = `marine2-${Math.random().toString(36).slice(2, 9)}`
         const cid = new TextEncoder().encode(clientId)
 
-        // total length: fixed header (12 bytes) + client id length
-        const payload = new Uint8Array(12 + cid.length)
+        const remainingLength = 10 + 2 + cid.length
 
-        // fixed header + variable header
-        const header = [
-          0x10, // CONNECT
-          12 + cid.length, // remaining length
-          0x00,
-          0x04,
-          0x4d,
-          0x51,
-          0x54,
-          0x54, // "MQTT"
-          0x04, // protocol level 4
-          0x02, // connect flags: clean session
-          0x00,
-          0x3c, // keepalive 60s
-          0x00,
-          cid.length,
-        ]
+        const payload = new Uint8Array(2 + remainingLength)
 
-        payload.set(header, 0) // copy header into payload
-        payload.set(cid, header.length) // append client id
+        let i = 0
+
+        // Fixed header
+        payload[i++] = 0x10 // CONNECT
+        payload[i++] = remainingLength
+
+        // Variable header
+        payload[i++] = 0x00
+        payload[i++] = 0x04
+        payload[i++] = 0x4d
+        payload[i++] = 0x51
+        payload[i++] = 0x54
+        payload[i++] = 0x54 // MQTT
+        payload[i++] = 0x04 // protocol level
+        payload[i++] = 0x02 // clean session
+        payload[i++] = 0x00
+        payload[i++] = 0x3c // keepalive
+
+        // Payload (Client ID)
+        payload[i++] = 0x00
+        payload[i++] = cid.length
+
+        payload.set(cid, i)
 
         this.ws!.send(payload)
       }
 
       this.ws.onmessage = (evt) => {
         const data = new Uint8Array(evt.data as ArrayBuffer)
-        if (data[0] === 0x20) {
-          // CONNACK
+
+        if (data[0] === 0x20 && data[1] === 0x02 && data[3] === 0x00) {
+          // Proper CONNACK check
           this.connected = true
           this.onConnectCb?.()
-          // Flush queued messages
-          for (const msg of this.queue) this._publish(msg.topic, msg.payload)
+
+          for (const msg of this.queue) {
+            this._publish(msg.topic, msg.payload)
+          }
           this.queue = []
         }
       }
