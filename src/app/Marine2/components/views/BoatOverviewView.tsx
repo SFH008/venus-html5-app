@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from "react"
 import boatLayout from "../../../images/jeanneau53.png"
 
-// ─── SignalK WebSocket hook ────────────────────────────────────────────────────
 import { getConfig } from "../../config/AppConfig"
 const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 
@@ -18,7 +17,6 @@ function useSignalK(paths: string[]): SignalKValues {
     try {
       const ws = new WebSocket(`ws://${SIGNALK_HOST}:${SIGNALK_PORT}/signalk/v1/stream?subscribe=none`)
       wsRef.current = ws
-
       ws.onopen = () => {
         ws.send(
           JSON.stringify({
@@ -27,7 +25,6 @@ function useSignalK(paths: string[]): SignalKValues {
           }),
         )
       }
-
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
@@ -44,7 +41,6 @@ function useSignalK(paths: string[]): SignalKValues {
           /* ignore */
         }
       }
-
       ws.onerror = () => ws.close()
       ws.onclose = () => {
         reconnectRef.current = setTimeout(connect, 5000)
@@ -66,7 +62,16 @@ function useSignalK(paths: string[]): SignalKValues {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type SensorType = "temperature" | "switch" | "bilge" | "door" | "smoke" | "battery"
+type SensorType =
+  | "temperature"
+  | "switch"
+  | "bilge"
+  | "door"
+  | "smoke"
+  | "battery"
+  | "tank_fresh"
+  | "tank_black"
+  | "tank_fuel"
 
 interface Sensor {
   id: string
@@ -74,36 +79,31 @@ interface Sensor {
   zone: string
   type: SensorType
   path: string
-  x: number // % of image width  (0=left/stern … 100=right/bow)
-  y: number // % of image height (0=top/port … 100=bottom/stbd)
+  x: number
+  y: number
   unit?: string
   onValue?: boolean | number | string
 }
 
-// ─── Sensor positions — mapped to jeanneau53.png (600×300, bow=RIGHT) ─────────
-//
-//  Zone reference (image %, bow right):
-//  Bow / fwd cabin      x≈82–92  y≈30–70
-//  Fwd head stbd        x≈72–80  y≈16–34
-//  Fwd head port        x≈72–80  y≈66–84
-//  Saloon (centre)      x≈50–62  y≈30–70
-//  Nav / companionway   x≈42–50  y≈42–58
-//  Galley               x≈38–46  y≈18–36
-//  Port aft cabin       x≈18–32  y≈16–44
-//  Stbd aft cabin       x≈18–32  y≈56–84
-//  Port aft head        x≈30–38  y≈16–28
-//  Stbd aft head        x≈30–38  y≈72–84
-//  Cockpit / helm       x≈6–16   y≈38–62
-
 const SENSORS: Sensor[] = [
-  // ── LIVE — wired to SignalK ──────────────────────────────────────────────
+  // ── Temperature & switches ──────────────────────────────────────────────
   {
     id: "saloon_temp",
     label: "Saloon",
     zone: "Saloon",
     type: "temperature",
     path: "environment.inside.saloon.temperature",
-    x: 57,
+    x: 43,
+    y: 50,
+    unit: "°C",
+  },
+  {
+    id: "master_temp",
+    label: "Master Cabin",
+    zone: "Master Cabin",
+    type: "temperature",
+    path: "environment.inside.masterCabin.temperature",
+    x: 63,
     y: 50,
     unit: "°C",
   },
@@ -117,8 +117,6 @@ const SENSORS: Sensor[] = [
     y: 62,
     onValue: true,
   },
-
-  // ── PLACEHOLDER — add SignalK paths when sensors are installed ───────────
   {
     id: "fwd_cabin_temp",
     label: "Fwd Cabin",
@@ -140,32 +138,42 @@ const SENSORS: Sensor[] = [
     onValue: true,
   },
   {
-    id: "fwd_head_stbd",
-    label: "Fwd Head S",
-    zone: "Fwd Stbd Head",
+    id: "main_alternator_temp",
+    label: "Main Alt",
+    zone: "Engine Room",
     type: "temperature",
-    path: "environment.inside.forwardHeadStarboard.temperature",
-    x: 75,
-    y: 24,
+    path: "electrical.alternator.main.temperature",
+    x: 34,
+    y: 55,
     unit: "°C",
   },
   {
-    id: "fwd_head_port",
-    label: "Fwd Head P",
-    zone: "Fwd Port Head",
+    id: "engine_room",
+    label: "Engine Room",
+    zone: "Engine Room",
     type: "temperature",
-    path: "environment.inside.forwardHeadPort.temperature",
-    x: 75,
-    y: 76,
+    path: "environment.inside.engineRoom.temperature",
+    x: 34,
+    y: 45,
     unit: "°C",
   },
   {
-    id: "galley_temp",
-    label: "Galley",
+    id: "freezer_temp",
+    label: "Freezer",
     zone: "Galley",
     type: "temperature",
-    path: "environment.inside.galley.temperature",
-    x: 43,
+    path: "environment.inside.freezer.temperature",
+    x: 45,
+    y: 26,
+    unit: "°C",
+  },
+  {
+    id: "refrigerator_temp",
+    label: "Refrigerator",
+    zone: "Galley",
+    type: "temperature",
+    path: "environment.inside.refrigerator.temperature",
+    x: 38,
     y: 26,
     unit: "°C",
   },
@@ -175,8 +183,8 @@ const SENSORS: Sensor[] = [
     zone: "Galley",
     type: "smoke",
     path: "environment.inside.galley.smoke",
-    x: 43,
-    y: 38,
+    x: 33,
+    y: 35,
     onValue: true,
   },
   {
@@ -185,8 +193,8 @@ const SENSORS: Sensor[] = [
     zone: "Port Aft Cabin",
     type: "temperature",
     path: "environment.inside.portAftCabin.temperature",
-    x: 24,
-    y: 28,
+    x: 20,
+    y: 38,
     unit: "°C",
   },
   {
@@ -195,27 +203,27 @@ const SENSORS: Sensor[] = [
     zone: "Stbd Aft Cabin",
     type: "temperature",
     path: "environment.inside.starboardAftCabin.temperature",
-    x: 24,
-    y: 72,
+    x: 20,
+    y: 62,
     unit: "°C",
   },
   {
-    id: "port_aft_head",
-    label: "Port Head",
-    zone: "Port Aft Head",
+    id: "engine_coolant_temp",
+    label: "Eng Coolant",
+    zone: "Engine Room",
     type: "temperature",
-    path: "environment.inside.portAftHead.temperature",
-    x: 34,
-    y: 20,
+    path: "propulsion.main.coolantTemperature",
+    x: 14,
+    y: 25,
     unit: "°C",
   },
   {
-    id: "stbd_aft_head",
-    label: "Stbd Head",
-    zone: "Stbd Aft Head",
+    id: "genset_coolant_temp",
+    label: "Gen Coolant",
+    zone: "Engine Room",
     type: "temperature",
-    path: "environment.inside.starboardAftHead.temperature",
-    x: 34,
+    path: "propulsion.genset.coolantTemperature",
+    x: 14,
     y: 80,
     unit: "°C",
   },
@@ -231,13 +239,83 @@ const SENSORS: Sensor[] = [
   },
   {
     id: "cockpit_temp",
-    label: "Cockpit",
+    label: "Outside Temp",
     zone: "Cockpit / Helm",
     type: "temperature",
     path: "environment.outside.temperature",
     x: 10,
     y: 50,
     unit: "°C",
+  },
+
+  // ── Tanks ───────────────────────────────────────────────────────────────
+  // Fresh water — 💧 cyan
+  {
+    id: "fw0",
+    label: "FW Master",
+    zone: "Master Cabin",
+    type: "tank_fresh",
+    path: "tanks.freshWater.0.currentLevel",
+    x: 73,
+    y: 48,
+  },
+  {
+    id: "fw1",
+    label: "FW Nav",
+    zone: "Nav Station",
+    type: "tank_fresh",
+    path: "tanks.freshWater.1.currentLevel",
+    x: 39,
+    y: 70,
+  },
+  {
+    id: "fw2",
+    label: "FW Stbd Aft",
+    zone: "Stbd Aft Cabin",
+    type: "tank_fresh",
+    path: "tanks.freshWater.2.currentLevel",
+    x: 22,
+    y: 72,
+  },
+
+  // Black water — 🚽 purple/dark
+  {
+    id: "bw0",
+    label: "BW Master",
+    zone: "Master Cabin Head",
+    type: "tank_black",
+    path: "tanks.blackWater.0.currentLevel",
+    x: 60,
+    y: 78,
+  },
+  {
+    id: "bw1",
+    label: "BW Stbd Aft",
+    zone: "Stbd Aft Head",
+    type: "tank_black",
+    path: "tanks.blackWater.1.currentLevel",
+    x: 31,
+    y: 78,
+  },
+  {
+    id: "bw2",
+    label: "BW Port",
+    zone: "Port Cabin Head",
+    type: "tank_black",
+    path: "tanks.blackWater.2.currentLevel",
+    x: 31,
+    y: 25,
+  },
+
+  // Fuel — ⛽ amber
+  {
+    id: "fuel0",
+    label: "Fuel",
+    zone: "Port Aft Cabin",
+    type: "tank_fuel",
+    path: "tanks.fuel.0.currentLevel",
+    x: 22,
+    y: 28,
   },
 ]
 
@@ -249,15 +327,52 @@ const TYPE_CONFIG: Record<SensorType, { icon: string; color: string; alertColor:
   door: { icon: "🚪", color: "#00d2ff", alertColor: "#ffd700" },
   smoke: { icon: "🔥", color: "#00d2ff", alertColor: "#ff4040" },
   battery: { icon: "🔋", color: "#00ff9d", alertColor: "#ff6b35" },
+  tank_fresh: { icon: "💧", color: "#22d3ee", alertColor: "#f87171" },
+  tank_black: { icon: "🚽", color: "#a78bfa", alertColor: "#f97316" },
+  tank_fuel: { icon: "⛽", color: "#fbbf24", alertColor: "#f87171" },
 }
 
 function kelvinToCelsius(k: number) {
   return (k - 273.15).toFixed(1)
 }
 
+function isTankType(type: SensorType): boolean {
+  return type === "tank_fresh" || type === "tank_black" || type === "tank_fuel"
+}
+
+function getTankPercent(value: number | boolean | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null
+  const v = typeof value === "number" ? value : parseFloat(String(value))
+  if (isNaN(v)) return null
+  return Math.round(v * 100)
+}
+
+function getTankColor(type: SensorType, pct: number): string {
+  const base = TYPE_CONFIG[type].color
+  const alert = TYPE_CONFIG[type].alertColor
+  if (type === "tank_black") {
+    // Black water: warn when HIGH
+    if (pct >= 80) return alert
+    if (pct >= 60) return "#fb923c"
+    return base
+  }
+  // Fresh water and fuel: warn when LOW
+  if (pct <= 15) return alert
+  if (pct <= 30) return "#fb923c"
+  return base
+}
+
 function getSensorDisplay(sensor: Sensor, value: number | boolean | string | null | undefined) {
   const cfg = TYPE_CONFIG[sensor.type]
   if (value === null || value === undefined) return { text: "—", color: "rgba(100,100,100,0.6)", isAlert: false }
+
+  if (isTankType(sensor.type)) {
+    const pct = getTankPercent(value)
+    if (pct === null) return { text: "—", color: "rgba(100,100,100,0.6)", isAlert: false }
+    const color = getTankColor(sensor.type, pct)
+    const isAlert = sensor.type === "tank_black" ? pct >= 80 : pct <= 15
+    return { text: `${pct}%`, color, isAlert }
+  }
 
   switch (sensor.type) {
     case "temperature": {
@@ -291,6 +406,37 @@ function getSensorDisplay(sensor: Sensor, value: number | boolean | string | nul
   }
 }
 
+// ─── Tank fill bar ────────────────────────────────────────────────────────────
+const TankBar = ({ pct, color, type: _type }: { pct: number; color: string; type: SensorType }) => {
+  // Black water fills left-to-right (filling up = bad)
+  // Fresh/fuel fills left-to-right (empty = bad, so bar shows how full = good)
+  const fill = Math.max(0, Math.min(100, pct))
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: 5,
+        background: "rgba(0,0,0,0.5)",
+        borderRadius: 3,
+        overflow: "hidden",
+        marginTop: 3,
+        border: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      <div
+        style={{
+          height: "100%",
+          width: `${fill}%`,
+          background: color,
+          borderRadius: 3,
+          boxShadow: `0 0 4px ${color}88`,
+          transition: "width 0.6s ease",
+        }}
+      />
+    </div>
+  )
+}
+
 // ─── SensorPin ────────────────────────────────────────────────────────────────
 const SensorPin = ({
   sensor,
@@ -306,6 +452,8 @@ const SensorPin = ({
   const cfg = TYPE_CONFIG[sensor.type]
   const { text, color, isAlert } = getSensorDisplay(sensor, value)
   const noData = value === null || value === undefined
+  const isTank = isTankType(sensor.type)
+  const pct = isTank ? getTankPercent(value) : null
 
   return (
     <div
@@ -360,10 +508,10 @@ const SensorPin = ({
             : "linear-gradient(135deg, rgba(0,10,22,0.87), rgba(0,20,42,0.87))",
           border: `1px solid ${noData ? "rgba(70,70,70,0.18)" : color + "45"}`,
           borderRadius: 5,
-          padding: "3px 7px",
+          padding: isTank ? "3px 7px 5px" : "3px 7px",
           backdropFilter: "blur(10px)",
           textAlign: "center",
-          minWidth: 80,
+          minWidth: isTank ? 88 : 80,
           boxShadow: selected ? `0 0 14px ${color}35, 0 2px 10px rgba(0,0,0,0.75)` : "0 1px 6px rgba(0,0,0,0.65)",
           transition: "all 0.2s",
         }}
@@ -392,6 +540,7 @@ const SensorPin = ({
         >
           {text}
         </div>
+        {isTank && pct !== null && <TankBar pct={pct} color={color} type={sensor.type} />}
       </div>
     </div>
   )
@@ -409,6 +558,8 @@ const DetailPanel = ({
 }) => {
   const cfg = TYPE_CONFIG[sensor.type]
   const { text, color } = getSensorDisplay(sensor, value)
+  const isTank = isTankType(sensor.type)
+  const pct = isTank ? getTankPercent(value) : null
 
   return (
     <div
@@ -440,7 +591,6 @@ const DetailPanel = ({
         </div>
       </div>
 
-      {/* Value */}
       <div
         style={{
           background: "rgba(0,4,12,0.6)",
@@ -454,23 +604,23 @@ const DetailPanel = ({
           CURRENT VALUE
         </div>
         <div style={{ fontSize: 26, fontWeight: 700, color }}>{text}</div>
+        {isTank && pct !== null && (
+          <div style={{ marginTop: 8 }}>
+            <TankBar pct={pct} color={color} type={sensor.type} />
+            <div style={{ fontSize: 11, color: "rgba(0,210,255,0.32)", marginTop: 4 }}>
+              {sensor.type === "tank_black" ? "Warn above 80% · Alert above 80%" : "Warn below 30% · Alert below 15%"}
+            </div>
+          </div>
+        )}
         {sensor.type === "temperature" && typeof value === "number" && (
           <div style={{ fontSize: 12, color: "rgba(0,210,255,0.32)", marginTop: 2 }}>Raw: {value.toFixed(2)} K</div>
         )}
       </div>
 
-      {/* Path */}
       <div style={{ fontSize: 12, color: "rgba(0,210,255,0.32)", letterSpacing: "0.12em", marginBottom: 3 }}>
         SIGNALK PATH
       </div>
-      <div
-        style={{
-          fontSize: 11,
-          color: "rgba(0,210,255,0.52)",
-          wordBreak: "break-all",
-          lineHeight: 1.65,
-        }}
-      >
+      <div style={{ fontSize: 11, color: "rgba(0,210,255,0.52)", wordBreak: "break-all", lineHeight: 1.65 }}>
         {sensor.path}
       </div>
     </div>
@@ -597,7 +747,6 @@ const BoatOverviewView = () => {
               Dance Of The Spirits
             </div>
           </div>
-
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <div
               onClick={() => setShowPins((v) => !v)}
@@ -614,7 +763,6 @@ const BoatOverviewView = () => {
             >
               Sensors
             </div>
-
             <div
               style={{
                 display: "flex",
@@ -661,7 +809,7 @@ const BoatOverviewView = () => {
           />
         )}
 
-        {/* Bottom legend */}
+        {/* Legend */}
         <div
           style={{
             position: "absolute",
@@ -699,7 +847,7 @@ const BoatOverviewView = () => {
                   boxShadow: `0 0 5px ${cfg.color}`,
                 }}
               />
-              {type}
+              {type.replace("tank_", "")}
             </div>
           ))}
         </div>

@@ -1,33 +1,75 @@
 import React, { useEffect, useState, useRef, useCallback } from "react"
 import boatLayout from "../../../images/jeanneau53.png"
-
 import { getConfig } from "../../config/AppConfig"
-const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
 
-type SwitchSystem = "venus" | "shelly" | "nodered" | "yarrboard"
-type SwitchState = "on" | "off" | "fault" | "unknown"
+const cfg = getConfig()
+const SIGNALK_HOST = cfg.signalkHost
+const SIGNALK_PORT = cfg.signalkPort
+const MQTT_WS_URL = `ws://${cfg.signalkHost}:9001`
+const MQTT_TOPIC = "marine2/switch/control"
 
-interface Switch {
+// ─── Types ────────────────────────────────────────────────────────────────────
+type SwitchSystem = "shelly" | "venus" | "yarrboard" | "nodered"
+type SwitchState = "on" | "off" | "unknown"
+
+interface SwitchDef {
   id: string
   label: string
   zone: string
   system: SwitchSystem
-  readPath: string
-  writePath: string
+  skPath: string
   x: number
   y: number
-  ampsPath?: string
   icon: string
 }
 
-const SWITCHES: Switch[] = [
+const SWITCHES: SwitchDef[] = [
+  {
+    id: "saloon_lights",
+    label: "Saloon Light",
+    zone: "Saloon",
+    system: "shelly",
+    skPath: "electrical.switches.shelly.saloonLights.state",
+    x: 57,
+    y: 38,
+    icon: "💡",
+  },
+  {
+    id: "fwd_cabin_light",
+    label: "Fwd Cabin",
+    zone: "Fwd Cabin",
+    system: "shelly",
+    skPath: "electrical.switches.shelly.fwdCabinLight.state",
+    x: 83,
+    y: 38,
+    icon: "💡",
+  },
+  {
+    id: "aft_cabin_light",
+    label: "Aft Cabins",
+    zone: "Aft Cabins",
+    system: "shelly",
+    skPath: "electrical.switches.shelly.aftCabinLight.state",
+    x: 24,
+    y: 50,
+    icon: "💡",
+  },
+  {
+    id: "cockpit_light",
+    label: "Cockpit Light",
+    zone: "Cockpit",
+    system: "shelly",
+    skPath: "electrical.switches.shelly.cockpitLight.state",
+    x: 12,
+    y: 38,
+    icon: "💡",
+  },
   {
     id: "nav_lights",
     label: "Nav Lights",
     zone: "Stern",
     system: "venus",
-    readPath: "electrical.switches.venus.navLights.state",
-    writePath: "electrical.switches.venus.navLights.state",
+    skPath: "electrical.switches.venus.navLights.state",
     x: 7,
     y: 50,
     icon: "🔴",
@@ -37,67 +79,17 @@ const SWITCHES: Switch[] = [
     label: "Anchor Light",
     zone: "Bow",
     system: "venus",
-    readPath: "electrical.switches.venus.anchorLight.state",
-    writePath: "electrical.switches.venus.anchorLight.state",
+    skPath: "electrical.switches.venus.anchorLight.state",
     x: 92,
     y: 50,
     icon: "⚓",
   },
   {
-    id: "saloon_lights",
-    label: "Saloon Lights",
-    zone: "Saloon",
-    system: "shelly",
-    readPath: "electrical.switches.shelly.saloonLights.state",
-    writePath: "electrical.switches.shelly.saloonLights.state",
-    x: 57,
-    y: 38,
-    ampsPath: "electrical.switches.shelly.saloonLights.current",
-    icon: "💡",
-  },
-  {
-    id: "fwd_cabin_lights",
-    label: "Fwd Cabin",
-    zone: "Fwd Cabin",
-    system: "shelly",
-    readPath: "electrical.switches.shelly.fwdCabinLights.state",
-    writePath: "electrical.switches.shelly.fwdCabinLights.state",
-    x: 83,
-    y: 38,
-    ampsPath: "electrical.switches.shelly.fwdCabinLights.current",
-    icon: "💡",
-  },
-  {
-    id: "aft_cabin_lights",
-    label: "Aft Cabins",
-    zone: "Aft Cabins",
-    system: "shelly",
-    readPath: "electrical.switches.shelly.aftCabinLights.state",
-    writePath: "electrical.switches.shelly.aftCabinLights.state",
-    x: 24,
-    y: 50,
-    ampsPath: "electrical.switches.shelly.aftCabinLights.current",
-    icon: "💡",
-  },
-  {
-    id: "cockpit_light",
-    label: "Cockpit Light",
-    zone: "Cockpit",
-    system: "shelly",
-    readPath: "electrical.switches.shelly.cockpitLight.state",
-    writePath: "electrical.switches.shelly.cockpitLight.state",
-    x: 12,
-    y: 38,
-    ampsPath: "electrical.switches.shelly.cockpitLight.current",
-    icon: "💡",
-  },
-  {
     id: "masthead_light",
     label: "Masthead",
     zone: "Mast",
-    system: "nodered",
-    readPath: "electrical.switches.virtual.mastheadLight.state",
-    writePath: "electrical.switches.virtual.mastheadLight.state",
+    system: "venus",
+    skPath: "electrical.switches.venus.mastheadLight.state",
     x: 65,
     y: 50,
     icon: "🔦",
@@ -107,11 +99,9 @@ const SWITCHES: Switch[] = [
     label: "Bilge Pump",
     zone: "Bilge",
     system: "nodered",
-    readPath: "electrical.switches.virtual.bilgePump.state",
-    writePath: "electrical.switches.virtual.bilgePump.state",
+    skPath: "electrical.switches.virtual.bilgePump.state",
     x: 50,
     y: 60,
-    ampsPath: "electrical.switches.virtual.bilgePump.current",
     icon: "💧",
   },
   {
@@ -119,11 +109,9 @@ const SWITCHES: Switch[] = [
     label: "Water Pump",
     zone: "Engine",
     system: "nodered",
-    readPath: "electrical.switches.virtual.waterPump.state",
-    writePath: "electrical.switches.virtual.waterPump.state",
+    skPath: "electrical.switches.virtual.waterPump.state",
     x: 44,
     y: 60,
-    ampsPath: "electrical.switches.virtual.waterPump.current",
     icon: "🚿",
   },
   {
@@ -131,11 +119,9 @@ const SWITCHES: Switch[] = [
     label: "Eng Blower",
     zone: "Engine Room",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch1.state",
-    writePath: "electrical.switches.yarrboard.ch1.state",
+    skPath: "electrical.switches.yarrboard.ch1.state",
     x: 38,
     y: 60,
-    ampsPath: "electrical.switches.yarrboard.ch1.current",
     icon: "🌀",
   },
   {
@@ -143,11 +129,9 @@ const SWITCHES: Switch[] = [
     label: "Fridge",
     zone: "Galley",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch2.state",
-    writePath: "electrical.switches.yarrboard.ch2.state",
+    skPath: "electrical.switches.yarrboard.ch2.state",
     x: 44,
     y: 28,
-    ampsPath: "electrical.switches.yarrboard.ch2.current",
     icon: "❄️",
   },
   {
@@ -155,11 +139,9 @@ const SWITCHES: Switch[] = [
     label: "Freezer",
     zone: "Galley",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch3.state",
-    writePath: "electrical.switches.yarrboard.ch3.state",
+    skPath: "electrical.switches.yarrboard.ch3.state",
     x: 38,
     y: 28,
-    ampsPath: "electrical.switches.yarrboard.ch3.current",
     icon: "🧊",
   },
   {
@@ -167,11 +149,9 @@ const SWITCHES: Switch[] = [
     label: "Ch 4",
     zone: "Spare",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch4.state",
-    writePath: "electrical.switches.yarrboard.ch4.state",
+    skPath: "electrical.switches.yarrboard.ch4.state",
     x: 57,
     y: 62,
-    ampsPath: "electrical.switches.yarrboard.ch4.current",
     icon: "⚡",
   },
   {
@@ -179,11 +159,9 @@ const SWITCHES: Switch[] = [
     label: "Ch 5",
     zone: "Spare",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch5.state",
-    writePath: "electrical.switches.yarrboard.ch5.state",
+    skPath: "electrical.switches.yarrboard.ch5.state",
     x: 65,
     y: 62,
-    ampsPath: "electrical.switches.yarrboard.ch5.current",
     icon: "⚡",
   },
   {
@@ -191,11 +169,9 @@ const SWITCHES: Switch[] = [
     label: "Ch 6",
     zone: "Spare",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch6.state",
-    writePath: "electrical.switches.yarrboard.ch6.state",
+    skPath: "electrical.switches.yarrboard.ch6.state",
     x: 73,
     y: 62,
-    ampsPath: "electrical.switches.yarrboard.ch6.current",
     icon: "⚡",
   },
   {
@@ -203,11 +179,9 @@ const SWITCHES: Switch[] = [
     label: "Ch 7",
     zone: "Spare",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch7.state",
-    writePath: "electrical.switches.yarrboard.ch7.state",
+    skPath: "electrical.switches.yarrboard.ch7.state",
     x: 73,
     y: 38,
-    ampsPath: "electrical.switches.yarrboard.ch7.current",
     icon: "⚡",
   },
   {
@@ -215,31 +189,136 @@ const SWITCHES: Switch[] = [
     label: "Ch 8",
     zone: "Spare",
     system: "yarrboard",
-    readPath: "electrical.switches.yarrboard.ch8.state",
-    writePath: "electrical.switches.yarrboard.ch8.state",
+    skPath: "electrical.switches.yarrboard.ch8.state",
     x: 83,
     y: 62,
-    ampsPath: "electrical.switches.yarrboard.ch8.current",
     icon: "⚡",
   },
 ]
 
 const SYSTEM_CONFIG: Record<SwitchSystem, { label: string; color: string }> = {
-  venus: { label: "Venus", color: "#00b1ff" },
   shelly: { label: "Shelly", color: "#00ff9d" },
+  venus: { label: "Venus", color: "#00b1ff" },
   nodered: { label: "Node-RED", color: "#ff7f00" },
   yarrboard: { label: "Yarrboard", color: "#c084fc" },
 }
 
+const STATE_COLORS: Record<SwitchState, string> = {
+  on: "#00ff9d",
+  off: "rgba(80,80,80,0.7)",
+  unknown: "rgba(60,60,60,0.5)",
+}
+
+// ─── Minimal MQTT-over-WebSocket client ───────────────────────────────────────
+// Implements just enough of MQTT 3.1.1 to publish — no external library needed
+class MqttWsClient {
+  private ws: WebSocket | null = null
+  private connected = false
+  private queue: Array<{ topic: string; payload: string }> = []
+  private onConnectCb?: () => void
+  private reconnectTimer?: ReturnType<typeof setTimeout>
+
+  connect(url: string, onConnect?: () => void) {
+    this.onConnectCb = onConnect
+    this._connect(url)
+  }
+
+  private _connect(url: string) {
+    try {
+      this.ws = new WebSocket(url, ["mqtt"])
+      this.ws.binaryType = "arraybuffer"
+
+      this.ws.onopen = () => {
+        // Send MQTT CONNECT packet
+        const clientId = `marine2-${Math.random().toString(36).slice(2, 9)}`
+        const cid = new TextEncoder().encode(clientId)
+
+        // total length: fixed header (12 bytes) + client id length
+        const payload = new Uint8Array(12 + cid.length)
+
+        // fixed header + variable header
+        const header = [
+          0x10, // CONNECT
+          12 + cid.length, // remaining length
+          0x00,
+          0x04,
+          0x4d,
+          0x51,
+          0x54,
+          0x54, // "MQTT"
+          0x04, // protocol level 4
+          0x02, // connect flags: clean session
+          0x00,
+          0x3c, // keepalive 60s
+          0x00,
+          cid.length,
+        ]
+
+        payload.set(header, 0) // copy header into payload
+        payload.set(cid, header.length) // append client id
+
+        this.ws!.send(payload)
+      }
+
+      this.ws.onmessage = (evt) => {
+        const data = new Uint8Array(evt.data as ArrayBuffer)
+        if (data[0] === 0x20) {
+          // CONNACK
+          this.connected = true
+          this.onConnectCb?.()
+          // Flush queued messages
+          for (const msg of this.queue) this._publish(msg.topic, msg.payload)
+          this.queue = []
+        }
+      }
+
+      this.ws.onclose = () => {
+        this.connected = false
+        this.reconnectTimer = setTimeout(() => this._connect(url), 5000)
+      }
+
+      this.ws.onerror = () => this.ws?.close()
+    } catch {
+      this.reconnectTimer = setTimeout(() => this._connect(url), 5000)
+    }
+  }
+
+  publish(topic: string, payload: string) {
+    if (this.connected) {
+      this._publish(topic, payload)
+    } else {
+      this.queue.push({ topic, payload })
+    }
+  }
+
+  private _publish(topic: string, payload: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    const enc = new TextEncoder()
+    const t = enc.encode(topic)
+    const p = enc.encode(payload)
+    const remaining = 2 + t.length + p.length
+    const packet = new Uint8Array(2 + remaining)
+    packet[0] = 0x30 // PUBLISH, QoS 0
+    packet[1] = remaining
+    packet[2] = 0x00
+    packet[3] = t.length
+    packet.set(t, 4)
+    packet.set(p, 4 + t.length)
+    this.ws.send(packet)
+  }
+
+  disconnect() {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.ws?.close()
+  }
+}
+
+// ─── SignalK WebSocket hook ───────────────────────────────────────────────────
 interface SKValues {
   [path: string]: number | boolean | string | null
 }
 
-function useSignalK(paths: string[]): {
-  values: SKValues
-  connected: boolean
-  sendPut: (path: string, value: boolean) => void
-} {
+function useSignalK(paths: string[]): { values: SKValues; connected: boolean } {
   const [values, setValues] = useState<SKValues>({})
   const [connected, setConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
@@ -292,43 +371,26 @@ function useSignalK(paths: string[]): {
     }
   }, [connect])
 
-  const sendPut = useCallback((path: string, value: boolean) => {
-    fetch(`http://${SIGNALK_HOST}:${SIGNALK_PORT}/signalk/v1/api/vessels/self/${path.replace(/\./g, "/")}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value }),
-    }).catch(() => {
-      /* ignore */
-    })
-  }, [])
-
-  return { values, connected, sendPut }
+  return { values, connected }
 }
 
 function getSwitchState(value: SKValues[string]): SwitchState {
   if (value === null || value === undefined) return "unknown"
   if (value === true || value === 1 || value === "true" || value === "on") return "on"
-  if (value === false || value === 0 || value === "false" || value === "off") return "off"
-  return "fault"
+  return "off"
 }
 
-const STATE_COLORS: Record<SwitchState, string> = {
-  on: "#00ff9d",
-  off: "rgba(80,80,80,0.7)",
-  fault: "#ff4040",
-  unknown: "rgba(60,60,60,0.5)",
-}
-
+// ─── Toggle Popup ─────────────────────────────────────────────────────────────
 const TogglePopup = ({
   sw,
   state,
-  amps,
+  pending,
   onToggle,
   onClose,
 }: {
-  sw: Switch
+  sw: SwitchDef
   state: SwitchState
-  amps: number | null
+  pending: boolean
   onToggle: () => void
   onClose: () => void
 }) => {
@@ -345,7 +407,7 @@ const TogglePopup = ({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(0,3,10,0.75)",
+        background: "rgba(0,3,10,0.78)",
         backdropFilter: "blur(4px)",
         animation: "fadeOverlay 0.15s ease forwards",
       }}
@@ -357,13 +419,13 @@ const TogglePopup = ({
           border: `1px solid ${sysCfg.color}40`,
           borderRadius: 12,
           padding: "22px 26px",
-          width: 260,
+          width: 270,
           boxShadow: `0 16px 48px rgba(0,0,0,0.85),0 0 30px ${sysCfg.color}15`,
           animation: "popupIn 0.2s ease forwards",
           fontFamily: "'Share Tech Mono',monospace",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 14, color: sysCfg.color, letterSpacing: "0.2em", textTransform: "uppercase" }}>
               {sw.icon} {sw.label}
@@ -398,17 +460,13 @@ const TogglePopup = ({
               flexShrink: 0,
             }}
           />
-          <div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: stColor, letterSpacing: "0.05em" }}>
-              {state.toUpperCase()}
-            </div>
-            {amps !== null && (
-              <div style={{ fontSize: 12, color: "rgba(0,210,255,0.45)", marginTop: 1 }}>{amps.toFixed(1)} A</div>
-            )}
+          <div style={{ fontSize: 22, fontWeight: 700, color: stColor, letterSpacing: "0.05em" }}>
+            {state === "unknown" ? "NO DATA" : state.toUpperCase()}
           </div>
         </div>
         <button
           onClick={onToggle}
+          disabled={pending}
           style={{
             width: "100%",
             padding: "11px 0",
@@ -422,43 +480,26 @@ const TogglePopup = ({
             fontWeight: 700,
             letterSpacing: "0.2em",
             textTransform: "uppercase",
-            cursor: "pointer",
+            cursor: pending ? "not-allowed" : "pointer",
             fontFamily: "'Share Tech Mono',monospace",
+            opacity: pending ? 0.6 : 1,
           }}
         >
-          {isOn ? "Turn OFF" : "Turn ON"}
+          {pending ? "SENDING…" : isOn ? "TURN OFF" : "TURN ON"}
         </button>
-        <div
-          style={{
-            marginTop: 14,
-            fontSize: 11,
-            color: "rgba(0,210,255,0.28)",
-            wordBreak: "break-all",
-            lineHeight: 1.6,
-          }}
-        >
-          {sw.writePath}
+        <div style={{ marginTop: 12, fontSize: 11, color: "rgba(0,210,255,0.28)", letterSpacing: "0.1em" }}>
+          via MQTT → Node-RED → {sysCfg.label}
         </div>
       </div>
     </div>
   )
 }
 
-const SwitchPin = ({
-  sw,
-  state,
-  amps,
-  onClick,
-}: {
-  sw: Switch
-  state: SwitchState
-  amps: number | null
-  onClick: () => void
-}) => {
+// ─── Switch Pin ───────────────────────────────────────────────────────────────
+const SwitchPin = ({ sw, state, onClick }: { sw: SwitchDef; state: SwitchState; onClick: () => void }) => {
   const sysCfg = SYSTEM_CONFIG[sw.system]
   const stColor = STATE_COLORS[state]
   const isOn = state === "on"
-  const isFault = state === "fault"
   return (
     <div
       onClick={onClick}
@@ -473,7 +514,7 @@ const SwitchPin = ({
         flexDirection: "column",
         alignItems: "center",
         gap: 3,
-        animation: isFault ? "alertPulse 0.9s ease-in-out infinite" : "pinFadeIn 0.5s ease forwards",
+        animation: "pinFadeIn 0.5s ease forwards",
       }}
     >
       <div style={{ position: "relative", width: 14, height: 14 }}>
@@ -539,37 +580,79 @@ const SwitchPin = ({
         >
           {state === "unknown" ? "—" : state.toUpperCase()}
         </div>
-        {amps !== null && isOn && (
-          <div style={{ fontSize: 12, color: "rgba(0,210,255,0.5)", marginTop: 1 }}>{amps.toFixed(1)}A</div>
-        )}
       </div>
     </div>
   )
 }
 
+// ─── Main View ────────────────────────────────────────────────────────────────
 const DigitalSwitchingView = () => {
-  const allPaths = [
-    ...SWITCHES.map((s) => s.readPath),
-    ...SWITCHES.filter((s) => s.ampsPath).map((s) => s.ampsPath as string),
-  ]
-  const { values, connected, sendPut } = useSignalK(allPaths)
-  const [popup, setPopup] = useState<Switch | null>(null)
+  const { values, connected } = useSignalK(SWITCHES.map((s) => s.skPath))
+  const [popup, setPopup] = useState<SwitchDef | null>(null)
+  const [pending, setPending] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState<SwitchSystem | "all">("all")
+  const [optimistic, setOptimistic] = useState<Record<string, boolean>>({})
+  const [mqttConn, setMqttConn] = useState(false)
+  const mqttRef = useRef<MqttWsClient | null>(null)
 
-  const handleToggle = (sw: Switch) => {
-    sendPut(sw.writePath, getSwitchState(values[sw.readPath] ?? null) !== "on")
-    setPopup(null)
+  // Connect MQTT WebSocket
+  useEffect(() => {
+    const client = new MqttWsClient()
+    mqttRef.current = client
+    client.connect(MQTT_WS_URL, () => setMqttConn(true))
+    return () => {
+      client.disconnect()
+      setMqttConn(false)
+    }
+  }, [])
+
+  const handleToggle = useCallback(
+    async (sw: SwitchDef) => {
+      const current =
+        optimistic[sw.id] !== undefined ? optimistic[sw.id] : getSwitchState(values[sw.skPath] ?? null) === "on"
+      const next = !current
+
+      setOptimistic((p) => ({ ...p, [sw.id]: next }))
+      setPending((p) => ({ ...p, [sw.id]: true }))
+      setPopup(null)
+
+      // Publish to MQTT — Node-RED subscribes and acts
+      mqttRef.current?.publish(MQTT_TOPIC, JSON.stringify({ id: sw.id, state: next }))
+
+      // Clear pending after 3s (SK update will clear optimistic)
+      setTimeout(() => setPending((p) => ({ ...p, [sw.id]: false })), 3000)
+    },
+    [values, optimistic],
+  )
+
+  // Clear optimistic once SK confirms
+  useEffect(() => {
+    setOptimistic((prev) => {
+      const next = { ...prev }
+      for (const sw of SWITCHES) {
+        if (next[sw.id] !== undefined) {
+          const skState = getSwitchState(values[sw.skPath] ?? null)
+          const optState = next[sw.id] ? "on" : "off"
+          if (skState === optState) delete next[sw.id]
+        }
+      }
+      return next
+    })
+  }, [values])
+
+  const getState = (sw: SwitchDef): SwitchState => {
+    if (optimistic[sw.id] !== undefined) return optimistic[sw.id] ? "on" : "off"
+    return getSwitchState(values[sw.skPath] ?? null)
   }
 
   const visible = filter === "all" ? SWITCHES : SWITCHES.filter((s) => s.system === filter)
-  const onCount = SWITCHES.filter((s) => getSwitchState(values[s.readPath] ?? null) === "on").length
+  const onCount = SWITCHES.filter((s) => getState(s) === "on").length
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600&family=Share+Tech+Mono&display=swap');
         @keyframes pinFadeIn { from{opacity:0;transform:translate(-50%,calc(-50% + 7px))} to{opacity:1;transform:translate(-50%,-50%)} }
-        @keyframes alertPulse { 0%,100%{transform:translate(-50%,-50%) scale(1)} 50%{transform:translate(-50%,-50%) scale(1.09)} }
         @keyframes ringExpand { 0%{transform:scale(1);opacity:0.5} 100%{transform:scale(2.6);opacity:0} }
         @keyframes fadeOverlay { from{opacity:0} to{opacity:1} }
         @keyframes popupIn { from{opacity:0;transform:scale(0.93) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
@@ -594,7 +677,6 @@ const DigitalSwitchingView = () => {
             }}
           />
         </div>
-
         <div
           style={{
             position: "absolute",
@@ -667,27 +749,36 @@ const DigitalSwitchingView = () => {
           >
             {onCount} / {SWITCHES.length} ON
           </div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: 12,
-              color: "rgba(200,230,255,0.42)",
-              letterSpacing: "0.2em",
-            }}
-          >
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: connected ? "#00ff9d" : "#ff5050",
-                boxShadow: connected ? "0 0 7px #00ff9d" : "0 0 7px #ff5050",
-                animation: connected ? "none" : "blink 1s ease infinite",
-              }}
-            />
-            {connected ? "SIGNALK LIVE" : "CONNECTING..."}
+          {/* Connection status */}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {[
+              { label: "SK", ok: connected },
+              { label: "MQTT", ok: mqttConn },
+            ].map(({ label, ok }) => (
+              <div
+                key={label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11,
+                  color: ok ? "rgba(0,255,157,0.7)" : "rgba(255,80,80,0.7)",
+                  letterSpacing: "0.15em",
+                }}
+              >
+                <div
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: ok ? "#00ff9d" : "#ff5050",
+                    boxShadow: ok ? "0 0 6px #00ff9d" : "0 0 6px #ff5050",
+                    animation: ok ? "none" : "blink 1s ease infinite",
+                  }}
+                />
+                {label}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -704,10 +795,9 @@ const DigitalSwitchingView = () => {
             gap: 8,
           }}
         >
-          {(["all", "venus", "shelly", "nodered", "yarrboard"] as const).map((sys) => {
-            const cfg = sys === "all" ? null : SYSTEM_CONFIG[sys]
-            const color = cfg ? cfg.color : "#00d2ff"
-            const label = cfg ? cfg.label : "All"
+          {(["all", "shelly", "venus", "nodered", "yarrboard"] as const).map((sys) => {
+            const color = sys === "all" ? "#00d2ff" : SYSTEM_CONFIG[sys].color
+            const label = sys === "all" ? "All" : SYSTEM_CONFIG[sys].label
             const active = filter === sys
             return (
               <div
@@ -732,23 +822,15 @@ const DigitalSwitchingView = () => {
           })}
         </div>
 
-        {/* Pins */}
         {visible.map((sw) => (
-          <SwitchPin
-            key={sw.id}
-            sw={sw}
-            state={getSwitchState(values[sw.readPath] ?? null)}
-            amps={sw.ampsPath && values[sw.ampsPath] !== undefined ? (values[sw.ampsPath] as number) : null}
-            onClick={() => setPopup(sw)}
-          />
+          <SwitchPin key={sw.id} sw={sw} state={getState(sw)} onClick={() => setPopup(sw)} />
         ))}
 
-        {/* Popup */}
         {popup && (
           <TogglePopup
             sw={popup}
-            state={getSwitchState(values[popup.readPath] ?? null)}
-            amps={popup.ampsPath && values[popup.ampsPath] !== undefined ? (values[popup.ampsPath] as number) : null}
+            state={getState(popup)}
+            pending={!!pending[popup.id]}
             onToggle={() => handleToggle(popup)}
             onClose={() => setPopup(null)}
           />
@@ -770,37 +852,34 @@ const DigitalSwitchingView = () => {
             background: "linear-gradient(0deg,rgba(0,3,10,0.96) 0%,transparent 100%)",
           }}
         >
-          {(Object.entries(SYSTEM_CONFIG) as [SwitchSystem, (typeof SYSTEM_CONFIG)[SwitchSystem]][]).map(
-            ([sys, cfg]) => (
+          {(Object.entries(SYSTEM_CONFIG) as [SwitchSystem, (typeof SYSTEM_CONFIG)[SwitchSystem]][]).map(([sys, c]) => (
+            <div
+              key={sys}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                fontSize: 12,
+                color: "rgba(200,230,255,0.35)",
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+              }}
+            >
               <div
-                key={sys}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  fontSize: 12,
-                  color: "rgba(200,230,255,0.35)",
-                  letterSpacing: "0.15em",
-                  textTransform: "uppercase",
+                  width: 5,
+                  height: 5,
+                  borderRadius: "50%",
+                  background: c.color,
+                  boxShadow: `0 0 5px ${c.color}`,
                 }}
-              >
-                <div
-                  style={{
-                    width: 5,
-                    height: 5,
-                    borderRadius: "50%",
-                    background: cfg.color,
-                    boxShadow: `0 0 5px ${cfg.color}`,
-                  }}
-                />
-                {cfg.label}
-              </div>
-            ),
-          )}
+              />
+              {c.label}
+            </div>
+          ))}
           <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12, letterSpacing: "0.12em" }}>
             <span style={{ color: "#00ff9d" }}>● ON</span>
             <span style={{ color: "rgba(80,80,80,0.9)" }}>● OFF</span>
-            <span style={{ color: "#ff4040" }}>● FAULT</span>
           </div>
         </div>
       </div>

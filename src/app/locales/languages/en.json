@@ -204,14 +204,15 @@
     "pages": {
         "diagnostics": "Diagnostics",
         "remoteConsole": "Remote Console",
-        "systemOverview": "System Overview",
+        "systemOverview": "Sensors",
         "switchingPane": "Switching Pane",
         "weatherView": "Weather",
         "weatherForecast": "Forecast",
+        "alarmView": "Alarms",
         "cerboOverview": "Vessel Dashboard",
         "switchView": "Vessel Dashboard",
         "watermakerView": "Watermaker",
-        "boatOverview": "Boat Overview",
+        "boatOverview": "Overview",
         "settings": "Settings"
     },
     "remoteLogin": {
