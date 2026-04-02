@@ -9,7 +9,7 @@ const MQTT_WS_URL = `ws://${cfg.signalkHost}:9001`
 const MQTT_TOPIC = "marine2/switch/control"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type SwitchSystem = "shelly" | "venus" | "yarrboard" | "nodered"
+type SwitchSystem = "shelly" | "venus" | "yarrboard" | "nodered" | "waveshare"
 type SwitchState = "on" | "off" | "unknown"
 
 interface SwitchDef {
@@ -115,6 +115,17 @@ const SWITCHES: SwitchDef[] = [
     icon: "🚿",
   },
   {
+    id: "ws_relay_1",
+    label: "Relay 1",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay1.state",
+    x: 30,
+    y: 20,
+    icon: "⚡",
+  },
+
+  {
     id: "yarrboard_1",
     label: "Eng Blower",
     zone: "Engine Room",
@@ -201,6 +212,7 @@ const SYSTEM_CONFIG: Record<SwitchSystem, { label: string; color: string }> = {
   venus: { label: "Venus", color: "#00b1ff" },
   nodered: { label: "Node-RED", color: "#ff7f00" },
   yarrboard: { label: "Yarrboard", color: "#c084fc" },
+  waveshare: { label: "Waveshare", color: "#f472b6" },
 }
 
 const STATE_COLORS: Record<SwitchState, string> = {
