@@ -9,7 +9,7 @@ const MQTT_WS_URL = `ws://${cfg.signalkHost}:9001`
 const MQTT_TOPIC = "marine2/switch/control"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type SwitchSystem = "shelly" | "venus" | "yarrboard" | "nodered" | "waveshare"
+type SwitchSystem = "shelly" | "venus" | "yarrboard" | "nodered" | "waveshare" | "wled"
 type SwitchState = "on" | "off" | "unknown"
 
 interface SwitchDef {
@@ -21,6 +21,7 @@ interface SwitchDef {
   x: number
   y: number
   icon: string
+  disabled?: boolean
 }
 
 const SWITCHES: SwitchDef[] = [
@@ -116,12 +117,82 @@ const SWITCHES: SwitchDef[] = [
   },
   {
     id: "ws_relay_1",
-    label: "Relay 1",
+    label: "PACTOR",
     zone: "Relay Board",
     system: "waveshare",
     skPath: "electrical.switches.waveshare.relay1.state",
+    x: 10,
+    y: 85,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_2",
+    label: "Relay 2",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay2.state",
+    x: 20,
+    y: 85,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_3",
+    label: "Relay 3",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay3.state",
     x: 30,
-    y: 20,
+    y: 85,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_4",
+    label: "Relay 4",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay4.state",
+    x: 40,
+    y: 85,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_5",
+    label: "Relay 5",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay5.state",
+    x: 10,
+    y: 95,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_6",
+    label: "Relay 6",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay6.state",
+    x: 20,
+    y: 95,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_7",
+    label: "Relay 7",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay7.state",
+    x: 30,
+    y: 95,
+    icon: "⚡",
+  },
+  {
+    id: "ws_relay_8",
+    label: "Relay 8",
+    zone: "Relay Board",
+    system: "waveshare",
+    skPath: "electrical.switches.waveshare.relay8.state",
+    x: 40,
+    y: 95,
     icon: "⚡",
   },
 
@@ -131,8 +202,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Engine Room",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch1.state",
-    x: 38,
-    y: 60,
+    x: 10,
+    y: 15,
     icon: "🌀",
   },
   {
@@ -141,8 +212,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Galley",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch2.state",
-    x: 44,
-    y: 28,
+    x: 18,
+    y: 15,
     icon: "❄️",
   },
   {
@@ -151,8 +222,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Galley",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch3.state",
-    x: 38,
-    y: 28,
+    x: 26,
+    y: 15,
     icon: "🧊",
   },
   {
@@ -161,8 +232,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Spare",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch4.state",
-    x: 57,
-    y: 62,
+    x: 34,
+    y: 15,
     icon: "⚡",
   },
   {
@@ -171,8 +242,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Spare",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch5.state",
-    x: 65,
-    y: 62,
+    x: 42,
+    y: 15,
     icon: "⚡",
   },
   {
@@ -181,8 +252,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Spare",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch6.state",
-    x: 73,
-    y: 62,
+    x: 50,
+    y: 15,
     icon: "⚡",
   },
   {
@@ -191,8 +262,8 @@ const SWITCHES: SwitchDef[] = [
     zone: "Spare",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch7.state",
-    x: 73,
-    y: 38,
+    x: 58,
+    y: 15,
     icon: "⚡",
   },
   {
@@ -201,9 +272,64 @@ const SWITCHES: SwitchDef[] = [
     zone: "Spare",
     system: "yarrboard",
     skPath: "electrical.switches.yarrboard.ch8.state",
-    x: 83,
-    y: 62,
+    x: 66,
+    y: 15,
     icon: "⚡",
+  },
+  // ── WLED strips ───────────────────────────────────────────────────────────
+  {
+    id: "wled_salon",
+    label: "Salon Strip",
+    zone: "Saloon",
+    system: "wled",
+    skPath: "electrical.switches.wled.salon.state",
+    x: 52,
+    y: 44,
+    icon: "🌈",
+  },
+  {
+    id: "wled_master",
+    label: "Master Strip",
+    zone: "Master Cabin",
+    system: "wled",
+    skPath: "electrical.switches.wled.master.state",
+    x: 68,
+    y: 44,
+    icon: "🌈",
+  },
+  // Reserved slots 3–5
+  {
+    id: "wled_3",
+    label: "WLED 3",
+    zone: "Reserved",
+    system: "wled",
+    skPath: "electrical.switches.wled.wled3.state",
+    x: 0,
+    y: 0,
+    icon: "🌈",
+    disabled: true,
+  },
+  {
+    id: "wled_4",
+    label: "WLED 4",
+    zone: "Reserved",
+    system: "wled",
+    skPath: "electrical.switches.wled.wled4.state",
+    x: 0,
+    y: 0,
+    icon: "🌈",
+    disabled: true,
+  },
+  {
+    id: "wled_5",
+    label: "WLED 5",
+    zone: "Reserved",
+    system: "wled",
+    skPath: "electrical.switches.wled.wled5.state",
+    x: 0,
+    y: 0,
+    icon: "🌈",
+    disabled: true,
   },
 ]
 
@@ -213,6 +339,7 @@ const SYSTEM_CONFIG: Record<SwitchSystem, { label: string; color: string }> = {
   nodered: { label: "Node-RED", color: "#ff7f00" },
   yarrboard: { label: "Yarrboard", color: "#c084fc" },
   waveshare: { label: "Waveshare", color: "#f472b6" },
+  wled: { label: "WLED", color: "#fcd34d" },
 }
 
 const STATE_COLORS: Record<SwitchState, string> = {
@@ -398,6 +525,22 @@ function getSwitchState(value: SKValues[string]): SwitchState {
   return "off"
 }
 
+// ─── WLED indicator ───────────────────────────────────────────────────────────
+// Small rainbow shimmer shown when WLED is on
+const WledShimmer = () => (
+  <div
+    style={{
+      height: 3,
+      borderRadius: 2,
+      marginTop: 3,
+      background: "linear-gradient(90deg,#ff0080,#ff8c00,#ffe000,#00ff9d,#00b4ff,#a855f7,#ff0080)",
+      backgroundSize: "200% 100%",
+      animation: "wledShimmer 2s linear infinite",
+      boxShadow: "0 0 6px rgba(255,200,0,0.5)",
+    }}
+  />
+)
+
 // ─── Toggle Popup ─────────────────────────────────────────────────────────────
 const TogglePopup = ({
   sw,
@@ -415,6 +558,8 @@ const TogglePopup = ({
   const sysCfg = SYSTEM_CONFIG[sw.system]
   const stColor = STATE_COLORS[state]
   const isOn = state === "on"
+  const isWled = sw.system === "wled"
+
   return (
     <div
       onClick={onClose}
@@ -456,6 +601,13 @@ const TogglePopup = ({
             ✕
           </div>
         </div>
+
+        {isWled && isOn && (
+          <div style={{ marginBottom: 12 }}>
+            <WledShimmer />
+          </div>
+        )}
+
         <div
           style={{
             display: "flex",
@@ -518,6 +670,7 @@ const SwitchPin = ({ sw, state, onClick }: { sw: SwitchDef; state: SwitchState; 
   const sysCfg = SYSTEM_CONFIG[sw.system]
   const stColor = STATE_COLORS[state]
   const isOn = state === "on"
+  const isWled = sw.system === "wled"
   return (
     <div
       onClick={onClick}
@@ -598,6 +751,7 @@ const SwitchPin = ({ sw, state, onClick }: { sw: SwitchDef; state: SwitchState; 
         >
           {state === "unknown" ? "—" : state.toUpperCase()}
         </div>
+        {isWled && isOn && <WledShimmer />}
       </div>
     </div>
   )
@@ -676,6 +830,7 @@ const DigitalSwitchingView = () => {
         @keyframes popupIn { from{opacity:0;transform:scale(0.93) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
         @keyframes scanLine { from{top:0} to{top:100%} }
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+        @keyframes wledShimmer { 0%{background-position:0% 50%} 100%{background-position:200% 50%} }
       `}</style>
 
       <div style={{ position: "relative", width: "100%", height: "100vh", background: "#000509", overflow: "hidden" }}>
