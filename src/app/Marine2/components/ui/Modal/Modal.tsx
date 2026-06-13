@@ -7,19 +7,24 @@ interface Props {
   onClose: () => void
   children: ReactNode
   className?: string
+  preserveLayout?: boolean
 }
 
-const Frame: FC<Props> = ({ children, open = true, onClose, className }) => {
+const Frame: FC<Props> = ({ children, open = true, onClose, className, preserveLayout = false }) => {
   const classes = classNames(
     "fixed inset-0 z-10 p-4 md:p-8 text-content-secondary modal items-center justify-center",
-    `${open ? "flex" : "hidden"}`, // control visibility via `open` attribute (or render conditionally)
+    preserveLayout ? { flex: true, "invisible pointer-events-none opacity-0": !open } : { hidden: !open, flex: open },
   )
   return (
     <div className={classes} onClick={onClose}>
-      <div className={classNames("absolute", className)} onClick={(e) => e.stopPropagation()}>
-        <div className="h-full overflow-hidden bg-surface-secondary rounded-md shadow-[0_8px_24px_-15px_rgba(0,0,0,0.75)]">
-          {children}
-        </div>
+      <div
+        className={classNames(
+          "absolute overflow-hidden rounded-md bg-surface-secondary shadow-[0_8px_24px_-15px_rgba(0,0,0,0.75)]",
+          className,
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
       </div>
     </div>
   )

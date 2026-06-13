@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react"
-import { observer } from "mobx-react"
+import React, { useCallback, useMemo, useState } from "react"
+import { observer } from "mobx-react-lite"
 import SwitchableOutput from "../ui/SwitchableOutput"
-import { useSwitchableOutputs } from "@victronenergy/mfd-modules"
+import GenericInput from "../ui/GenericInput"
+import { useSwitchingPane, SwitchingPaneItem } from "@victronenergy/mfd-modules"
 import SmartswitchOffIcon from "../../images/icons/smartswitch_off.svg"
 import SmartswitchOnIcon from "../../images/icons/smartswitch_on.svg"
 import { Modal } from "../ui/Modal"
@@ -9,23 +10,24 @@ import classNames from "classnames"
 import GroupPaginator from "../ui/GroupPaginator/GroupPaginator"
 import Box from "../ui/Box"
 import { translate } from "react-i18nify"
+import { SwitchingPaneContext } from "./SwitchingPaneContext"
+
+let persistedPage = 0
 
 const SwitchingPane = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const switchableOutputs = useSwitchableOutputs(translate("switches.gxDeviceRelays"))
+  const switchableOutputs = useSwitchingPane(translate("switches.gxDeviceRelays"))
 
-  const [groupNames, setGroupNames] = useState<string[]>([])
-  const [groupsOfSwitchableOutputs, setGroupsOfSwitchableOutputs] = useState<React.JSX.Element[][]>([])
-
-  const [currentPage, setCurrentPage] = useState(0)
+  const [currentPage, setCurrentPage] = useState(persistedPage)
   const [pageCount, setPageCount] = useState(0)
 
   const currentPageSetter = useCallback((a: number, b: number) => {
     setPageCount(b)
     setCurrentPage(a)
+    persistedPage = a
   }, [])
 
-  useLayoutEffect(() => {
+  const { groupNames, groupsOfSwitchableOutputs } = useMemo(() => {
     const x = Object.entries(switchableOutputs.groups)
       // Sort groups by name
       .sort(([a], [b]) => a.localeCompare(b))
@@ -33,30 +35,43 @@ const SwitchingPane = () => {
         // Return array of switchable outputs
         return {
           groupName: groupName,
-          outputs: groupSwitchableOutputs.map((switchableOutput) => (
-            <SwitchableOutput
-              className="w-full pl-2 pr-2"
-              key={`${switchableOutput.deviceId}_${switchableOutput.outputId}`}
-              tree={switchableOutput.tree}
-              type={switchableOutput.type}
-              deviceId={switchableOutput.deviceId}
-              outputId={switchableOutput.outputId}
-              parentDeviceName={switchableOutput.parentDeviceName}
-            />
-          )),
+          outputs: groupSwitchableOutputs.map((item: SwitchingPaneItem) => {
+            if (item.kind === "genericInput") {
+              return (
+                <GenericInput
+                  className="w-full pl-2 pr-2"
+                  key={`${item.deviceId}_${item.outputId}`}
+                  tree={item.tree}
+                  type={item.type}
+                  deviceId={item.deviceId}
+                  inputId={item.outputId}
+                  parentDeviceName={item.parentDeviceName}
+                />
+              )
+            }
+            return (
+              <SwitchableOutput
+                className="w-full pl-2 pr-2"
+                key={`${item.deviceId}_${item.outputId}`}
+                tree={item.tree}
+                type={item.type}
+                deviceId={item.deviceId}
+                outputId={item.outputId}
+                parentDeviceName={item.parentDeviceName}
+              />
+            )
+          }),
         }
       })
-    // array of groupNames by index
-    setGroupNames(x.map((g) => g.groupName))
-    // array of groups by index containing arrays of switchable outputs
-    setGroupsOfSwitchableOutputs(x.map((g) => g.outputs))
+    return {
+      groupNames: x.map((g) => g.groupName),
+      groupsOfSwitchableOutputs: x.map((g) => g.outputs),
+    }
   }, [switchableOutputs.groups])
 
-  useEffect(() => {
-    if (Object.keys(switchableOutputs.groups).length === 0) {
-      setIsModalOpen(false)
-    }
-  }, [groupsOfSwitchableOutputs, switchableOutputs.groups])
+  if (isModalOpen && Object.keys(switchableOutputs.groups).length === 0) {
+    setIsModalOpen(false)
+  }
 
   if (Object.keys(switchableOutputs.groups).length === 0) {
     return <></>
@@ -79,63 +94,65 @@ const SwitchingPane = () => {
         )}
         <Modal.Frame
           open={isModalOpen}
-          onClose={() => {
-            // setIsModalOpen(false)
-          }}
+          onClose={() => setIsModalOpen(false)}
           className={classNames("w-5/6 max-w-5/6 h-5/6 max-h-5/6")}
+          preserveLayout
         >
           <Modal.Body variant="popUp" className="h-full bg-surface-primary">
-            <GroupPaginator
-              childrenGroups={groupsOfSwitchableOutputs}
-              orientation="vertical"
-              currentPageSetter={currentPageSetter}
-            >
-              {({
-                columnChildren,
-                groupIndex,
-                groupColumnIndex,
-                groupColumnCount,
-                isFirstColumnOnPage,
-                isFirstColumnOnLastPage,
-              }) => {
-                var displayPageTitle = false
-                // NOTE: display page title for first page in every group
-                if (groupColumnIndex === 0) {
-                  displayPageTitle = true
-                }
-                // NOTE: display page title for first column displayed onscreen
-                if (isFirstColumnOnPage) {
-                  displayPageTitle = true
-                }
-                // NOTE: display page title for first column displayed onscreen
-                // NOTE: when we are on the last page. (which can be non-first column
-                // NOTE: when on the before-last page). Example for three columns:
-                // groups: [a a a] [b b]
-                // page 0: [a _ _]
-                // page 1: [a] [b _]
-                // last column `a` in the first group is also first column on the last page
-                // and should not be displayed unless we are showing the last page
-                if (isFirstColumnOnLastPage && currentPage === pageCount - 1) {
-                  displayPageTitle = true
-                }
-                return (
-                  <div
-                    className={classNames("pt-2 pb-2 h-full", {
-                      "pl-2": groupColumnIndex === 0,
-                      "pr-2": groupColumnIndex === groupColumnCount - 1,
-                    })}
-                  >
-                    <Box
-                      title={displayPageTitle ? groupNames[groupIndex] : "\u00A0"}
-                      roundLeftCorners={groupColumnIndex === 0}
-                      roundRightCorners={groupColumnIndex === groupColumnCount - 1}
+            <SwitchingPaneContext.Provider value={{ isOpen: isModalOpen }}>
+              <GroupPaginator
+                childrenGroups={groupsOfSwitchableOutputs}
+                orientation="vertical"
+                pageNumber={currentPage}
+                currentPageSetter={currentPageSetter}
+              >
+                {({
+                  columnChildren,
+                  groupIndex,
+                  groupColumnIndex,
+                  groupColumnCount,
+                  isFirstColumnOnPage,
+                  isFirstColumnOnLastPage,
+                }) => {
+                  var displayPageTitle = false
+                  // NOTE: display page title for first page in every group
+                  if (groupColumnIndex === 0) {
+                    displayPageTitle = true
+                  }
+                  // NOTE: display page title for first column displayed onscreen
+                  if (isFirstColumnOnPage) {
+                    displayPageTitle = true
+                  }
+                  // NOTE: display page title for first column displayed onscreen
+                  // NOTE: when we are on the last page. (which can be non-first column
+                  // NOTE: when on the before-last page). Example for three columns:
+                  // groups: [a a a] [b b]
+                  // page 0: [a _ _]
+                  // page 1: [a] [b _]
+                  // last column `a` in the first group is also first column on the last page
+                  // and should not be displayed unless we are showing the last page
+                  if (isFirstColumnOnLastPage && currentPage === pageCount - 1) {
+                    displayPageTitle = true
+                  }
+                  return (
+                    <div
+                      className={classNames("pt-2 pb-2 h-full", {
+                        "pl-2": groupColumnIndex === 0,
+                        "pr-2": groupColumnIndex === groupColumnCount - 1,
+                      })}
                     >
-                      {columnChildren}
-                    </Box>
-                  </div>
-                )
-              }}
-            </GroupPaginator>
+                      <Box
+                        title={displayPageTitle ? groupNames[groupIndex] : "\u00A0"}
+                        roundLeftCorners={groupColumnIndex === 0}
+                        roundRightCorners={groupColumnIndex === groupColumnCount - 1}
+                      >
+                        {columnChildren}
+                      </Box>
+                    </div>
+                  )
+                }}
+              </GroupPaginator>
+            </SwitchingPaneContext.Provider>
           </Modal.Body>
         </Modal.Frame>
       </div>

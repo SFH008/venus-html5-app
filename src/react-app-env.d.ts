@@ -49,6 +49,12 @@ declare module "*.svg" {
   export default content
 }
 
+declare module "*.css" {}
+
+declare module "*.scss" {}
+
+declare module "*.sass" {}
+
 declare module "*.module.css" {
   const classes: { readonly [key: string]: string }
   export default classes
@@ -62,4 +68,25 @@ declare module "*.module.scss" {
 declare module "*.module.sass" {
   const classes: { readonly [key: string]: string }
   export default classes
+}
+
+interface DiagConsoleEntry {
+  time: Date
+  level: string
+  message: string
+}
+
+interface DiagConsole {
+  show(): void
+  hide(): void
+  toggle(): void
+  isVisible(): boolean
+  onVisibilityChange(fn: ((visible: boolean) => void) | null): void
+  clear(): void
+  getLog(): DiagConsoleEntry[]
+  hookIframe(iframe: HTMLIFrameElement): () => void
+}
+
+interface Window {
+  diagConsole?: DiagConsole
 }

@@ -1,14 +1,16 @@
-import React, { useCallback, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import {
-  getSwitchableOutputNameForDisplay,
+  getSwitchingPaneItemNameForDisplay,
   SwitchableOutputId,
   SwitchableOutputTree,
   SwitchingDeviceInstanceId,
   useSwitchableOutput,
 } from "@victronenergy/mfd-modules"
 import classnames from "classnames"
-import { observer } from "mobx-react"
+import { observer } from "mobx-react-lite"
+import StatusPill from "../StatusPill"
 import { getDecimalPlaces, getValueOrDefault, useValueFormatter } from "./helpers"
+import { getSwitchableOutputStatusPill, isSwitchableOutputDisabled } from "./statusHelper"
 
 interface SliderOutputProps {
   key: string
@@ -21,7 +23,7 @@ interface SliderOutputProps {
 
 const SliderOutput = observer((props: SliderOutputProps) => {
   const switchableOutput = useSwitchableOutput(props.tree, props.deviceId, props.outputId)
-  const outputName = getSwitchableOutputNameForDisplay(switchableOutput, props.parentDeviceName)
+  const outputName = getSwitchingPaneItemNameForDisplay(switchableOutput, props.parentDeviceName)
 
   const min = getValueOrDefault(switchableOutput.dimmingMin, 0)
   const max = getValueOrDefault(switchableOutput.dimmingMax, 100)
@@ -29,10 +31,12 @@ const SliderOutput = observer((props: SliderOutputProps) => {
   const decimals = getValueOrDefault(switchableOutput.decimals, getDecimalPlaces(step))
   const value = getValueOrDefault(switchableOutput.dimming, 1)
   const unit = getValueOrDefault(switchableOutput.unit, "")
+  const disabled = isSwitchableOutputDisabled(switchableOutput.status)
+  const statusPill = getSwitchableOutputStatusPill(switchableOutput.status, switchableOutput.type)
   const ratio = Math.round(((value - min) / (max - min)) * 100)
 
   const [isDragging, setIsDragging] = useState(false)
-  const updateTimeoutRef = useRef<NodeJS.Timeout>()
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const formatValueAndUnit = useValueFormatter({ decimals })
 
@@ -62,15 +66,23 @@ const SliderOutput = observer((props: SliderOutputProps) => {
     (percentage: number) => {
       if (updateTimeoutRef.current) {
         clearTimeout(updateTimeoutRef.current)
-        updateTimeoutRef.current = undefined
+        updateTimeoutRef.current = null
       }
 
       updateTimeoutRef.current = setTimeout(() => {
         switchableOutput.updateDimming(percentage)
-      }, 10)
+      }, 50)
     },
     [switchableOutput],
   )
+
+  useEffect(() => {
+    return () => {
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handlePress = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     setIsDragging(true)
@@ -96,18 +108,29 @@ const SliderOutput = observer((props: SliderOutputProps) => {
 
     if (updateTimeoutRef.current) {
       clearTimeout(updateTimeoutRef.current)
-      updateTimeoutRef.current = undefined
+      updateTimeoutRef.current = null
     }
   }
 
   return (
-    <div className={classnames("mt-4", props.className)}>
+    <div className={classnames("mt-4 select-none", props.className)}>
       <div className="flex">
         <div className="flex-1">{outputName}</div>
-        <div className="flex py-1">{formatValueAndUnit(value, unit)}</div>
+        {statusPill ? (
+          <div className="flex py-1">
+            <StatusPill label={statusPill.label} variant={statusPill.variant} />
+          </div>
+        ) : (
+          <div className="flex text-content-secondary">{formatValueAndUnit(value, unit)}</div>
+        )}
       </div>
       {/* Border */}
-      <div className="h-px-44 rounded-md bg-surface-victronBlue border-2 border-content-victronBlue">
+      <div
+        className={classnames("h-px-44 rounded-md border-2", {
+          "bg-surface-victronGray border-content-victronGray pointer-events-none": disabled,
+          "bg-surface-victronBlue border-content-victronBlue": !disabled,
+        })}
+      >
         {/* Container */}
         <div className="h-full rounded-sm flex overflow-hidden">
           {/* Slider Container */}
@@ -126,11 +149,19 @@ const SliderOutput = observer((props: SliderOutputProps) => {
             <div className="flex h-full">
               {/* Percent area */}
               <div
-                className="h-full bg-content-victronBlue transition-all duration-100 ease-out"
+                className={classnames(
+                  "h-full transition-all duration-100 ease-out",
+                  disabled ? "bg-content-victronGray50" : "bg-content-victronBlue",
+                )}
                 style={{ width: `${ratio}%` }}
               />
               {/* Handle Background */}
-              <div className="h-full flex items-center px-1 bg-content-victronBlue">
+              <div
+                className={classnames(
+                  "h-full flex items-center px-1",
+                  disabled ? "bg-content-victronGray50" : "bg-content-victronBlue",
+                )}
+              >
                 {/* Handle */}
                 <div className="w-px-4 h-[70%] rounded-sm bg-content-onVictronBlue"></div>
               </div>

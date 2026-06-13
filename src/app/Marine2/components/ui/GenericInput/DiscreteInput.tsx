@@ -1,0 +1,53 @@
+import React from "react"
+import {
+  getSwitchingPaneItemNameForDisplay,
+  SwitchableOutputTree,
+  SwitchingDeviceInstanceId,
+  GenericInputId,
+  useGenericInput,
+} from "@victronenergy/mfd-modules"
+import classnames from "classnames"
+import { observer } from "mobx-react"
+import { translate } from "react-i18nify"
+import StatusPill from "../StatusPill"
+import { getValueOrDefault } from "../SwitchableOutput/helpers"
+import { getLocalizedOrDefault, getStatusLabel } from "./helpers"
+
+interface DiscreteInputProps {
+  key: string
+  tree: SwitchableOutputTree
+  deviceId: SwitchingDeviceInstanceId
+  inputId: GenericInputId
+  parentDeviceName: string
+  className?: string
+}
+
+const DiscreteInput = observer((props: DiscreteInputProps) => {
+  const genericInput = useGenericInput(props.tree, props.deviceId, props.inputId)
+  const inputName = getSwitchingPaneItemNameForDisplay(genericInput, props.parentDeviceName)
+
+  const label = getValueOrDefault(genericInput.primaryLabel, translate("switches.state"))
+  const options = Array.isArray(genericInput.labels) ? genericInput.labels : []
+  const selectedIndex = Number(getValueOrDefault(genericInput.value, 0))
+  const selectedLabel = options.length > selectedIndex ? options[selectedIndex] : options.length > 0 ? options[0] : "--"
+  const statusLabel = getStatusLabel(genericInput.status)
+
+  return (
+    <div className={classnames("mt-4", props.className)}>
+      <div className="flex">
+        <div className="flex-1">{inputName}</div>
+        {statusLabel && (
+          <div className="flex py-1">
+            <StatusPill label={statusLabel} variant="red" />
+          </div>
+        )}
+      </div>
+      <div className="h-px-44 rounded-md bg-surface-tertiary flex items-center px-4">
+        <span className="flex-1 text-base text-content-secondary">{label}</span>
+        <span className="text-base text-content-primary">{getLocalizedOrDefault(selectedLabel)}</span>
+      </div>
+    </div>
+  )
+})
+
+export default DiscreteInput

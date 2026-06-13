@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { observer } from "mobx-react-lite"
 import classnames from "classnames"
 import { translate, Translate } from "react-i18nify"
-import useSize from "@react-hook/size"
+import useSize from "app/Marine2/utils/hooks/use-size"
 import { useAppStore, useTheme } from "@victronenergy/mfd-modules"
 import { QRCode } from "react-qrcode-logo"
 import { useBrowserFeatures } from "app/Marine2/utils/hooks/use-browser-features"
@@ -21,6 +21,15 @@ const RemoteConsole = ({ host, width, height }: Props) => {
     iframeRef.current?.focus()
   }, [iframeLoaded])
 
+  useEffect(() => {
+    const iframe = iframeRef.current
+    if (!iframe || !iframeLoaded) return
+    const unhook = window.diagConsole?.hookIframe(iframe)
+    return () => {
+      unhook?.()
+    }
+  }, [iframeLoaded])
+
   if (!browserFeatures.isInitialized) {
     return null
   }
@@ -32,7 +41,7 @@ const RemoteConsole = ({ host, width, height }: Props) => {
 
   const protocol = (typeof window !== "undefined" && window.location.protocol) || "http:"
   const colorScheme = themeStore.autoMode ? "auto" : themeStore.darkMode ? "dark" : "light"
-  const iframeUrl = `${protocol}//${host}/?fullscreen&colorScheme=${colorScheme}`
+  const iframeUrl = `${protocol}//${host}/?fullscreen&colorScheme=${colorScheme}&animationEnabled=false`
   const qrCodeUrl = `${window.location.protocol}//venus.local/`
 
   if (app.guiVersion !== 1 && browserFeatures.isGuiV2Supported === false) {

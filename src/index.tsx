@@ -14,19 +14,12 @@ import "./app/locales"
 import { ScopeContext } from "@sentry/types/types/scope"
 
 // Get app according to whitelabel
-const KvnrvApp = React.lazy(() => import("./app/KVNRV/App"))
 const MarineApp = React.lazy(() => import("./app/MarineApp/App"))
 const Marine2App = React.lazy(() => import("./app/Marine2/App"))
 
 const whitelabel = process.env.REACT_APP_WHITELABEL
 const getApp = () => {
   switch (whitelabel) {
-    case "KVNRV":
-      return (
-        <React.Suspense fallback={<Loading />}>
-          <KvnrvApp protocol={proto} host={host} port={port} path={path} />
-        </React.Suspense>
-      )
     case "Marine":
       return (
         <React.Suspense fallback={<Loading />}>
@@ -86,8 +79,3 @@ const root = createRoot(container!)
 root.render(<React.StrictMode>{getApp()}</React.StrictMode>)
 
 registerServiceWorker()
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-// reportWebVitals()

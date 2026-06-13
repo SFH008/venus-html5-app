@@ -1,7 +1,7 @@
 import PageSelector, { PageSelectorProps, SelectorLocation } from "../PageSelector"
 import classnames from "classnames"
 import React, { useState, useRef, useLayoutEffect } from "react"
-import useSize from "@react-hook/size"
+import useSize from "app/Marine2/utils/hooks/use-size"
 
 /// Takes the horizontal space occupied by `children` and divides it by number of `pages`
 /// and clips to display only one page at a time, starting at `startingPage`.
@@ -19,7 +19,11 @@ const PageFlipper = ({
   const pageRef = useRef<HTMLDivElement>(null)
   const [width, height] = useSize(wrapperRef)
   const [currentPage, setCurrentPage] = useState(startingPage ?? 0)
-  const [cachedCurrentPage] = useState(startingPage ?? 0)
+  const currentPageRef = useRef(startingPage ?? 0)
+
+  useLayoutEffect(() => {
+    currentPageRef.current = currentPage
+  }, [currentPage])
 
   useLayoutEffect(() => {
     if (pageSelectorPropsSetter) {
@@ -32,14 +36,14 @@ const PageFlipper = ({
     }
   }, [currentPage, pageSelectorPropsSetter, pages])
 
-  // Restore scroll position to cachedCurrentPage when viewport changes
+  // Restore scroll position when viewport changes (e.g. modal hidden→visible)
   useLayoutEffect(() => {
     if (!pageRef.current) {
       return
     }
-    const offset = cachedCurrentPage * pageRef.current.offsetWidth
+    const offset = currentPageRef.current * pageRef.current.offsetWidth
     pageRef.current.scrollLeft = offset
-  }, [width, height, cachedCurrentPage])
+  }, [width, height])
 
   // Smooth scroll to new position when currentPage changes
   useLayoutEffect(() => {
@@ -64,9 +68,9 @@ const PageFlipper = ({
     currentPageSetter(currentPage)
   }, [currentPage, currentPageSetter])
 
-  useLayoutEffect(() => {
-    if (pages && currentPage && currentPage > pages - 1) setCurrentPage(pages - 1)
-  }, [currentPage, pages])
+  if (pages && currentPage && currentPage > pages - 1) {
+    setCurrentPage(pages - 1)
+  }
 
   return (
     <div
