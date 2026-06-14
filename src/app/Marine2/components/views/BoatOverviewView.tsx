@@ -9,8 +9,9 @@ interface SignalKValues {
   [path: string]: number | boolean | string | null
 }
 
-function useSignalK(paths: string[]): SignalKValues {
+function useSignalK(paths: string[]): { values: SignalKValues; connected: boolean } {
   const [values, setValues] = useState<SignalKValues>({})
+  const [connected, setConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -20,12 +21,11 @@ function useSignalK(paths: string[]): SignalKValues {
       wsRef.current = ws
 
       ws.onopen = () => {
-        ws.send(
-          JSON.stringify({
-            context: "vessels.self",
-            subscribe: paths.map((path) => ({ path, period: 2000, format: "full" })),
-          }),
-        )
+        setConnected(true)
+        ws.send(JSON.stringify({
+          context: "vessels.self",
+          subscribe: paths.map((path) => ({ path, period: 2000, format: "full" })),
+        }))
       }
 
       ws.onmessage = (event) => {
@@ -40,13 +40,12 @@ function useSignalK(paths: string[]): SignalKValues {
             })
             setValues((prev) => ({ ...prev, ...newVals }))
           }
-        } catch {
-          /* ignore */
-        }
+        } catch { /* ignore */ }
       }
 
-      ws.onerror = () => ws.close()
+      ws.onerror = () => { setConnected(false); ws.close() }
       ws.onclose = () => {
+        setConnected(false)
         reconnectRef.current = setTimeout(connect, 5000)
       }
     } catch {
@@ -62,7 +61,7 @@ function useSignalK(paths: string[]): SignalKValues {
     }
   }, [connect])
 
-  return values
+  return { values, connected }
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -479,14 +478,10 @@ const DetailPanel = ({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const BoatOverviewView = () => {
-  const signalkValues = useSignalK(SENSORS.map((s) => s.path))
   const [selected, setSelected] = useState<Sensor | null>(null)
-  const [connected, setConnected] = useState(false)
   const [showPins, setShowPins] = useState(true)
+  const { values: signalkValues, connected } = useSignalK(SENSORS.map((s) => s.path))
 
-  useEffect(() => {
-    if (Object.keys(signalkValues).length > 0) setConnected(true)
-  }, [signalkValues])
 
   return (
     <>

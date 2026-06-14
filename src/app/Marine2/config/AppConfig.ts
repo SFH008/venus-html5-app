@@ -58,7 +58,7 @@ const STORAGE_KEY = "marine2_config"
 // ─── DEFAULT VALUES ───────────────────────────────────────────────────────────
 export const CONFIG_DEFAULTS: AppConfigShape = {
   // Network
-  signalkHost: "192.168.76.171",
+  signalkHost: "192.168.2.120",
   signalkPort: 3000,
   // Notifications
   notifPrefix: "notifications.marine2",
@@ -73,7 +73,7 @@ export const CONFIG_DEFAULTS: AppConfigShape = {
   repeatEmergency: 30,
   repeatAlarm: 120,
   // Yarrboard
-  yarrboardHost: "192.168.76.171:1880", // Brineomatic Yarrboard — update if IP changes
+  yarrboardHost: "192.168.2.171:1880", // Brineomatic Yarrboard — update if IP changes
   yarrboardUser: "admin",
   yarrboardPass: "admin",
   // PowerView paths — update these from SignalK Data Browser
@@ -81,7 +81,7 @@ export const CONFIG_DEFAULTS: AppConfigShape = {
   pvSolarPath: "electrical.solar.288",
   pvInverterPath: "electrical.inverters.288",
   pvBmvRelayPath: "electrical.switches.1",
-  pvRecBmsWsUrl: "ws://192.168.76.x:8080",
+  pvRecBmsWsUrl: "ws://192.168.2.184:8080",
   // PowerView alarm thresholds
   pvAlarmSocLow: 20,
   pvAlarmSocHigh: 98,

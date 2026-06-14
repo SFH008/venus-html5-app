@@ -102,26 +102,26 @@ function checkJSFeatures() {
     "async/await": "async function test() { await Promise.resolve(); }",
     "arrow functions": "(() => {})",
     // eslint-disable-next-line prettier/prettier
-    "let": "let x = 1;",
+    let: "let x = 1;",
     // eslint-disable-next-line prettier/prettier
-    "const": "const x = 1;",
+    const: "const x = 1;",
     // eslint-disable-next-line prettier/prettier
-    "class": "class Test {}",
+    class: "class Test {}",
 
     "template literals": "`test ${1}`",
     // eslint-disable-next-line prettier/prettier
-    "destructuring": "const {a} = {a: 1}",
+    destructuring: "const {a} = {a: 1}",
     "rest parameters": "(...args) => args",
     "spread operator": "[...[]];",
     "object shorthand": "const a=1; ({a})",
     "default parameters": "(a=1) => a",
     "Map/Set": "new Map(); new Set()",
     // eslint-disable-next-line prettier/prettier
-    "Promise": "new Promise(r => r())",
+    Promise: "new Promise(r => r())",
     // eslint-disable-next-line prettier/prettier
-    "Symbol": 'Symbol("test")',
+    Symbol: 'Symbol("test")',
     // eslint-disable-next-line prettier/prettier
-    "BigInt": "BigInt(123)",
+    BigInt: "BigInt(123)",
     "bigint literal": "123n",
     "nullish coalescing": "let x; let y = x ?? 5;",
     "nullish coalescing assignment": "let x; x ??= 5;",
@@ -129,13 +129,13 @@ function checkJSFeatures() {
     "logical AND assignment": "let x = 1; x &&= 5;",
     "optional chaining": "let obj = {}; obj.something?.method?.()",
     // eslint-disable-next-line prettier/prettier
-    "FinalizationRegistry": "new FinalizationRegistry(() => {})",
+    FinalizationRegistry: "new FinalizationRegistry(() => {})",
     // eslint-disable-next-line prettier/prettier
-    "TextEncoder": "new TextEncoder()",
+    TextEncoder: "new TextEncoder()",
     // eslint-disable-next-line prettier/prettier
-    "TextDecoder": "new TextDecoder()",
+    TextDecoder: "new TextDecoder()",
     // eslint-disable-next-line prettier/prettier
-    "ReadableStream": "new ReadableStream({})",
+    ReadableStream: "new ReadableStream({})",
   }
 
   const results: { [x: string]: boolean } = {}
@@ -184,7 +184,7 @@ export const useBrowserFeatures = () => {
       "WASM Sign Extensions": signExtensions(),
       "WASM Memory (50MB)": checkWasmMemory(),
       // eslint-disable-next-line prettier/prettier
-      "WebGL": Promise.resolve(webglDiag.contextType !== null),
+      WebGL: Promise.resolve(webglDiag.contextType !== null),
     }
 
     Promise.all(

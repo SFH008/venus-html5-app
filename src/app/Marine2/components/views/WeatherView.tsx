@@ -858,9 +858,7 @@ const TrendAlarms = ({
         pressSlope3h !== null ? `${pressSlope3h >= 0 ? "+" : ""}${pressSlope3h.toFixed(1)} hPa/3h` : "No pressure data"
       }
       sub={
-        baroAlarm.level === "ALARM"
-          ? "⚠ DETERIORATING CONDITIONS"
-          : `alarm: <−${T.pressAlarmDrop} hPa/3h + rising wind`
+        baroAlarm.level === "ALARM" ? "⚠ DETERIORATING CONDITIONS" : `alarm: <−${T.pressAlarmDrop} hPa/3h + rising wind`
       }
       spark={pressSpark}
     />

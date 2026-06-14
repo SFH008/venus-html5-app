@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState, useEffect } from "react"
 import SettingsMenu from "../SettingsMenu"
 import VersionInfo from "../VersionInfo"
 import PageSelector, { PageSelectorProps } from "../PageSelector"
@@ -7,9 +7,9 @@ import { AppViews, useAppViewsStore } from "../../../modules/AppViews"
 import SwitchingPane from "../../views/SwitchingPane"
 
 const NAV_ITEMS: { view: AppViews; icon: string; label: string }[] = [
-  { view: AppViews.BOAT_OVERVIEW, icon: "🛥", label: "Vessel" },
+  { view: AppViews.BOAT_OVERVIEW, icon: "🖥", label: "System" },
   { view: AppViews.SWITCH_VIEW, icon: "🔌", label: "Switches" },
-  { view: AppViews.POWER_VIEW, icon: "⚡", label: "Power" },
+  { view: AppViews.POWER_VIEW, icon: "🛥", label: "Vessel" },
   { view: AppViews.WATERMAKER_VIEW, icon: "🌊", label: "Water" },
   { view: AppViews.ALARM_VIEW, icon: "🔔", label: "Alarms" },
   { view: AppViews.WEATHER_VIEW, icon: "🌬", label: "Weather" },
@@ -36,28 +36,28 @@ const footerStyles = `
 const Footer = ({ pageSelectorProps }: Props) => {
   const appViewsStore = useAppViewsStore()
 
-const current = appViewsStore.currentView
-const isShowingBackButton = current !== AppViews.ROOT
-const [alarmCount, setAlarmCount] = useState(0)
-const [alarmSeverity, setAlarmSeverity] = useState<AlarmSeverity>("none")
+  const current = appViewsStore.currentView
+  const isShowingBackButton = current !== AppViews.ROOT
+  const [alarmCount, setAlarmCount] = useState(0)
+  const [alarmSeverity, setAlarmSeverity] = useState<AlarmSeverity>("none")
 
-useEffect(() => {
-  const onCount = (e: Event) => {
-    setAlarmCount((e as CustomEvent<number>).detail ?? 0)
-  }
-  const onSeverity = (e: Event) => {
-    const d = (e as CustomEvent<{ severity: AlarmSeverity }>).detail
-    setAlarmSeverity(d?.severity ?? "none")
-  }
-  window.addEventListener("marine2_alarm_count", onCount)
-  window.addEventListener("marine2_alarm_severity", onSeverity)
-  return () => {
-    window.removeEventListener("marine2_alarm_count", onCount)
-    window.removeEventListener("marine2_alarm_severity", onSeverity)
-  }
-}, [])
+  useEffect(() => {
+    const onCount = (e: Event) => {
+      setAlarmCount((e as CustomEvent<number>).detail ?? 0)
+    }
+    const onSeverity = (e: Event) => {
+      const d = (e as CustomEvent<{ severity: AlarmSeverity }>).detail
+      setAlarmSeverity(d?.severity ?? "none")
+    }
+    window.addEventListener("marine2_alarm_count", onCount)
+    window.addEventListener("marine2_alarm_severity", onSeverity)
+    return () => {
+      window.removeEventListener("marine2_alarm_count", onCount)
+      window.removeEventListener("marine2_alarm_severity", onSeverity)
+    }
+  }, [])
 
-const handleBackClick = () => appViewsStore.setView(AppViews.ROOT)
+  const handleBackClick = () => appViewsStore.setView(AppViews.ROOT)
   return (
     <>
       <style>{footerStyles}</style>

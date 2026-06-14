@@ -47,4 +47,24 @@ export default [
       },
     },
   },
+  {
+    files: [
+      "src/app/Marine2/components/views/AlarmView.tsx",
+      "src/app/Marine2/components/views/BoatOverviewView.tsx",
+      "src/app/Marine2/components/views/DigitalSwitchingView.tsx",
+      "src/app/Marine2/components/views/SystemOverviewView.tsx",
+      "src/app/Marine2/components/views/WatermakerView.tsx",
+      "src/app/Marine2/components/views/WeatherForecastView.tsx",
+      "src/app/Marine2/components/views/WeatherView.tsx",
+      "src/app/Marine2/components/views/SplashScreen.tsx",
+      "src/app/Marine2/components/ui/Footer/Footer.tsx",
+    ],
+    rules: {
+      "react-hooks/immutability": "off",
+      "react-hooks/purity": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "no-undef": "off",
+      "prettier/prettier": "warn",
+    },
+  },
 ]

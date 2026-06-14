@@ -258,7 +258,7 @@ const SplashScreen = ({ onComplete, duration = 4500, vesselName = "Dance Of The 
           }}
         >
           <div>SYS › VENUS OS 3.7</div>
-          <div>MQTT › 192.168.76.100:9001</div>
+          <div>MQTT › {window.location.hostname}:9001</div>
           <div>VRM › dca63208dd75</div>
         </div>
 

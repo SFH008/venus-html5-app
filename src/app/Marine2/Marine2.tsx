@@ -9,6 +9,7 @@ import SplashScreen from "./components/views/SplashScreen"
 import Connecting from "./components/ui/Connecting"
 import MqttUnavailable from "./components/ui/MqttUnavailable"
 import ErrorFallback from "./components/ui/Error"
+import BoxView from "./components/views/BoxView"
 import BoatOverviewView from "./components/views/BoatOverviewView"
 import DigitalSwitchingView from "./components/views/DigitalSwitchingView"
 import WeatherView from "./components/views/WeatherView"
@@ -17,7 +18,6 @@ import WeatherForecastView from "./components/views/WeatherForecastView"
 import WatermakerView from "./components/views/WatermakerView"
 import SystemOverviewView from "./components/views/SystemOverviewView"
 import SettingsView from "./components/views/SettingsView"
-import PowerView from "./components/views/PowerView"
 import MainLayout from "./components/ui/MainLayout"
 
 export const Marine2 = observer((props: AppProps) => {
@@ -49,11 +49,7 @@ export const Marine2 = observer((props: AppProps) => {
   const renderView = () => {
     switch (currentView) {
       case AppViews.BOAT_OVERVIEW:
-        return (
-          <MainLayout>
-            <BoatOverviewView />
-          </MainLayout>
-        )
+        return <BoxView boxId={AppViews.BOX_ENERGY_OVERVIEW} />
       case AppViews.SWITCH_VIEW:
         return (
           <MainLayout>
@@ -75,7 +71,7 @@ export const Marine2 = observer((props: AppProps) => {
       case AppViews.POWER_VIEW:
         return (
           <MainLayout>
-            <PowerView />
+            <BoatOverviewView />
           </MainLayout>
         )
       case AppViews.WATERMAKER_VIEW:
@@ -103,11 +99,7 @@ export const Marine2 = observer((props: AppProps) => {
           </MainLayout>
         )
       default:
-        return (
-          <MainLayout>
-            <BoatOverviewView />
-          </MainLayout>
-        )
+        return <BoxView boxId={AppViews.BOX_ENERGY_OVERVIEW} />
     }
   }
 
