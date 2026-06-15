@@ -373,9 +373,8 @@ const BatteryPanel = ({ battery }: { battery: Battery }) => {
               strokeDasharray={`${circumference * 0.75} ${circumference}`}
               strokeLinecap="round"
               transform="rotate(135 70 70)"
-            />
+            /> 
             <circle
-              cx="70"
               cy="70"
               r={R}
               fill="none"
