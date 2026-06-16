@@ -1,64 +1,66 @@
-import React, { useEffect, useState, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import boatLayout from "../../../images/jeanneau53.png"
+import mqtt from "mqtt"
 
-import { getConfig } from "../../config/AppConfig"
-const { signalkHost: SIGNALK_HOST, signalkPort: SIGNALK_PORT } = getConfig()
+
+const MQTT_WS_URL = `ws://${window.location.hostname}/websocket-mqtt`
+
 
 interface SignalKValues {
   [path: string]: number | boolean | string | null
 }
 
-function useSignalK(paths: string[]): SignalKValues {
+function useSignalK(paths: string[]): { values: SignalKValues; connected: boolean } {
   const [values, setValues] = useState<SignalKValues>({})
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [connected, setConnected] = useState(false)
+  const clientRef = useRef<mqtt.MqttClient | null>(null)
 
-  const connect = useCallback(() => {
-    try {
-      const ws = new WebSocket(`ws://${SIGNALK_HOST}:${SIGNALK_PORT}/signalk/v1/stream?subscribe=none`)
-      wsRef.current = ws
-      ws.onopen = () => {
-        ws.send(
-          JSON.stringify({
-            context: "vessels.self",
-            subscribe: paths.map((path) => ({ path, period: 2000, format: "full" })),
-          }),
-        )
-      }
-      ws.onmessage = (event) => {
+  useEffect(() => {
+    const client = mqtt.connect(MQTT_WS_URL, {
+      clientId: `marine2-boat-overview-${Math.random().toString(16).slice(2)}`,
+      clean: true,
+      reconnectPeriod: 5000,
+    })
+    clientRef.current = client
+
+    client.on("connect", () => {
+      setConnected(true)
+      // Subscribe to all relevant paths
+      paths.forEach((path) => {
+        const topic = path
+        client.subscribe(topic)
+      })
+    })
+
+    client.on("message", (topic, payload) => {
+      try {
+        // Convert topic back to dot-notation path
+        const path = topic.replace("vessels/self/", "").replace(/\//g, ".")
+        const raw = payload.toString()
+        // Try parse as JSON, fall back to raw string
+        let value: number | boolean | string | null
         try {
-          const data = JSON.parse(event.data)
-          if (data.updates) {
-            const newVals: SignalKValues = {}
-            data.updates.forEach((u: { values?: { path: string; value: unknown }[] }) => {
-              u.values?.forEach(({ path, value }) => {
-                newVals[path] = value as number | boolean | string | null
-              })
-            })
-            setValues((prev) => ({ ...prev, ...newVals }))
-          }
+          const parsed = JSON.parse(raw)
+          value = typeof parsed === "object" && parsed !== null && "value" in parsed
+            ? parsed.value
+            : parsed
         } catch {
-          /* ignore */
+          value = raw
         }
-      }
-      ws.onerror = () => ws.close()
-      ws.onclose = () => {
-        reconnectRef.current = setTimeout(connect, 5000)
-      }
-    } catch {
-      reconnectRef.current = setTimeout(connect, 5000)
+        setValues((prev) => ({ ...prev, [path]: value }))
+      } catch (err) { console.error(err) }
+    })
+
+    client.on("disconnect", () => setConnected(false))
+    client.on("error", () => setConnected(false))
+    client.on("offline", () => setConnected(false))
+
+    return () => {
+      client.end()
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    connect()
-    return () => {
-      wsRef.current?.close()
-      if (reconnectRef.current) clearTimeout(reconnectRef.current)
-    }
-  }, [connect])
-
-  return values
+  return { values, connected }
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -629,14 +631,10 @@ const DetailPanel = ({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const BoatOverviewView = () => {
-  const signalkValues = useSignalK(SENSORS.map((s) => s.path))
+  const { values: signalkValues, connected } = useSignalK(SENSORS.map((s) => s.path))
   const [selected, setSelected] = useState<Sensor | null>(null)
-  const [connected, setConnected] = useState(false)
   const [showPins, setShowPins] = useState(true)
 
-  useEffect(() => {
-    if (Object.keys(signalkValues).length > 0) setConnected(true)
-  }, [signalkValues])
 
   return (
     <>

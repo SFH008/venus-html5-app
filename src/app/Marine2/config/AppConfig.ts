@@ -12,6 +12,7 @@ export interface AppConfigShape {
   // ── Network ────────────────────────────────────────────────────────────
   signalkHost: string
   signalkPort: number
+  MQTT_HOST: string
 
   // ── Notifications (SignalK PUT path) ───────────────────────────────────
   notifPrefix: string // e.g. "notifications.marine2"
@@ -60,6 +61,9 @@ export const CONFIG_DEFAULTS: AppConfigShape = {
   // Network
   signalkHost: "192.168.2.120",
   signalkPort: 3000,
+
+  MQTT_HOST: "192.168.2.123",
+
   // Notifications
   notifPrefix: "notifications.marine2",
   // Node-RED
