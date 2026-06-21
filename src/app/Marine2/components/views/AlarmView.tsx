@@ -4,11 +4,15 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from "react"
-import { getConfig } from "../../config/AppConfig"
+import { getConfig, skWsUrl } from "../../config/AppConfig"
 
 const cfg = getConfig()
 const SK_HOST = `http://${cfg.signalkHost}:${cfg.signalkPort}`
-const SK_WS = `ws://${cfg.signalkHost}:${cfg.signalkPort}/signalk/v1/stream?subscribe=none`
+const SK_WS = skWsUrl(cfg)
+// Node-RED on NUC2 — alarm-action and alarm-status endpoints added to the
+// Marine Alarms flow to work around Signal K's write-auth wall. Signal K's
+// own v2 action path (silence/acknowledge/clear) requires a bearer token
+// which the browser doesn't have; Node-RED holds privileged state instead.
 const NR_HOST = `http://${cfg.signalkHost}:${cfg.nodeRedPort}`
 
 type AlarmState = "emergency" | "alarm" | "warn" | "alert" | "normal" | "nominal"
@@ -20,6 +24,7 @@ interface NotifStatus {
   canSilence: boolean
   canAcknowledge: boolean
   canClear: boolean
+  silencedUntil?: number | null
 }
 
 interface Notification {
@@ -32,22 +37,29 @@ interface Notification {
   status?: NotifStatus
 }
 
+// Local activeAlarms entry returned by /alarm-status on Node-RED.
+// This is the source of truth for silenced/acknowledged because the
+// Signal K write path requires auth the browser doesn't have.
+interface NrAlarmStatus {
+  id: string
+  path: string | null
+  state: string
+  silenced: boolean
+  acknowledged: boolean
+  silencedUntil: number | null
+}
+
 const STATE_COLOR: Record<AlarmState, { text: string; bg: string; border: string; glow: string }> = {
   emergency: { text: "#ff4444", bg: "#1a0000", border: "#ff444488", glow: "0 0 12px #ff444466" },
-  alarm: { text: "#f87171", bg: "#1e0808", border: "#f8717188", glow: "0 0 10px #f8717144" },
-  warn: { text: "#fbbf24", bg: "#1e1508", border: "#fbbf2488", glow: "0 0 10px #fbbf2444" },
-  alert: { text: "#fb923c", bg: "#1a1008", border: "#fb923c88", glow: "0 0 8px  #fb923c44" },
-  normal: { text: "#4ade80", bg: "#0a1e0a", border: "#4ade8044", glow: "none" },
-  nominal: { text: "#60a5fa", bg: "#0a1020", border: "#60a5fa44", glow: "none" },
+  alarm:     { text: "#f87171", bg: "#1e0808", border: "#f8717188", glow: "0 0 10px #f8717144" },
+  warn:      { text: "#fbbf24", bg: "#1e1508", border: "#fbbf2488", glow: "0 0 10px #fbbf2444" },
+  alert:     { text: "#fb923c", bg: "#1a1008", border: "#fb923c88", glow: "0 0 8px  #fb923c44" },
+  normal:    { text: "#4ade80", bg: "#0a1e0a", border: "#4ade8044", glow: "none" },
+  nominal:   { text: "#60a5fa", bg: "#0a1020", border: "#60a5fa44", glow: "none" },
 }
 
 const STATE_PRIORITY: Record<AlarmState, number> = {
-  emergency: 0,
-  alarm: 1,
-  warn: 2,
-  alert: 3,
-  normal: 4,
-  nominal: 5,
+  emergency: 0, alarm: 1, warn: 2, alert: 3, normal: 4, nominal: 5,
 }
 
 const styles = `
@@ -79,6 +91,7 @@ const styles = `
   .av-tag.silenced{color:#60a5fa;background:#0a1020;border-color:#60a5fa44}
   .av-tag.acknowledged{color:#4ade80;background:#0a1e0a;border-color:#4ade8044}
   .av-tag.method{color:#4a7a9a;background:#0a1218;border-color:#1a3a5a}
+  .av-tag.expires{color:#a78bfa;background:#0d0a20;border-color:#a78bfa44;font-size:10px}
   .av-ts{font-family:'Share Tech Mono',monospace;font-size:11px;color:#2a4a6a}
   .av-actions{display:flex;gap:5px;flex-wrap:wrap}
   .av-btn{padding:4px 10px;border-radius:3px;border:1px solid;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;transition:all .15s;background:transparent}
@@ -107,9 +120,13 @@ function formatTs(ts?: string): string {
   try {
     const d = new Date(ts)
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-  } catch {
-    return ""
-  }
+  } catch { return "" }
+}
+
+function formatExpiry(until: number | null | undefined): string {
+  if (!until) return ""
+  const remaining = Math.max(0, Math.round((until - Date.now()) / 60000))
+  return remaining > 0 ? `SILENCED ${remaining}m` : "SILENCE EXPIRING"
 }
 
 function sortNotifs(list: Notification[]): Notification[] {
@@ -121,22 +138,18 @@ function sortNotifs(list: Notification[]): Notification[] {
   })
 }
 
+// Post an action to the Node-RED /alarm-action endpoint on NUC2.
+// Signal K's own v2 action path requires a write-auth bearer token the
+// browser doesn't hold; Node-RED is the privileged intermediary.
+// "clear" is remapped to "acknowledge" server-side (zone alarms
+// instantly reassert if cleared, so they behave identically).
 async function skAction(id: string, action: "silence" | "acknowledge" | "clear"): Promise<boolean> {
-  try {
-    const res = await fetch(`${SK_HOST}/signalk/v2/api/notifications/${id}/${action}`, {
-      method: "POST",
-      signal: AbortSignal.timeout(3000),
-    })
-    if (res.ok) return true
-  } catch {
-    /* fall through */
-  }
   try {
     const res = await fetch(`${NR_HOST}/alarm-action`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain" },
       body: JSON.stringify({ id, action }),
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(4000),
     })
     return res.ok
   } catch {
@@ -170,6 +183,30 @@ function parseNotifTree(tree: any, prefix = "notifications"): Notification[] {
   return results
 }
 
+// Overlay Node-RED's activeAlarms state (source of truth for
+// silenced/acknowledged) onto what Signal K reported, since Signal K's
+// own status fields are updated via auth-gated writes the browser can't do.
+function overlayNrStatus(notifs: Notification[], nrStatuses: NrAlarmStatus[]): Notification[] {
+  if (!nrStatuses.length) return notifs
+  return notifs.map((n) => {
+    const nr = nrStatuses.find((s) => s.id === n.id || s.path === n.path || s.id === n.path.replace(/^notifications\./, ""))
+    if (!nr) return n
+    return {
+      ...n,
+      status: {
+        silenced: nr.silenced,
+        acknowledged: nr.acknowledged,
+        silencedUntil: nr.silencedUntil,
+        // Silence and Acknowledge are always available while alarm is active
+        // unless already in that state. Clear behaves like Acknowledge.
+        canSilence: !nr.silenced && !nr.acknowledged,
+        canAcknowledge: !nr.acknowledged,
+        canClear: !nr.acknowledged,
+      },
+    }
+  })
+}
+
 function dispatchAlarmEvents(list: Notification[]) {
   const active = list.filter((n) => n.state !== "normal" && n.state !== "nominal")
   const activeCount = active.length
@@ -195,6 +232,21 @@ const AlarmView: React.FC = () => {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const notifsRef = useRef<Map<string, Notification>>(new Map())
+  const nrStatusRef = useRef<NrAlarmStatus[]>([])
+
+  // Poll Node-RED's /alarm-status to get the real silenced/acknowledged
+  // state for each active alarm, then overlay it onto whatever Signal K
+  // reported. Falls back silently if NUC2 is powered off.
+  const pollNrStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`${NR_HOST}/alarm-status`, { signal: AbortSignal.timeout(3000) })
+      if (!res.ok) return
+      const data: NrAlarmStatus[] = await res.json()
+      nrStatusRef.current = data
+    } catch {
+      /* NUC2 may be off — not fatal */
+    }
+  }, [])
 
   const pollNotifs = useCallback(async () => {
     try {
@@ -204,32 +256,19 @@ const AlarmView: React.FC = () => {
       if (!res.ok) return
       const tree = await res.json()
       const list = parseNotifTree(tree)
-      try {
-        const res2 = await fetch(`${SK_HOST}/signalk/v2/api/notifications`, {
-          signal: AbortSignal.timeout(3000),
-        })
-        if (res2.ok) {
-          const v2data = await res2.json()
-          if (Array.isArray(v2data)) {
-            for (const n of list) {
-              const v2 = v2data.find((x: any) => x.id === n.id || x.path === n.path)
-              if (v2?.status) n.status = v2.status
-              if (v2?.id) n.id = v2.id
-            }
-          }
-        }
-      } catch {
-        /* v2 optional */
-      }
+
+      await pollNrStatus()
+      const merged = overlayNrStatus(list, nrStatusRef.current)
+
       const map = new Map<string, Notification>()
-      for (const n of list) map.set(n.path, n)
+      for (const n of merged) map.set(n.path, n)
       notifsRef.current = map
-      setNotifs(sortNotifs(list))
-      dispatchAlarmEvents(list)
+      setNotifs(sortNotifs(merged))
+      dispatchAlarmEvents(merged)
     } catch {
       /* ignore */
     }
-  }, [])
+  }, [pollNrStatus])
 
   const connectWs = useCallback(() => {
     if (wsRef.current) {
@@ -240,12 +279,10 @@ const AlarmView: React.FC = () => {
     wsRef.current = ws
     ws.onopen = () => {
       setConnected(true)
-      ws.send(
-        JSON.stringify({
-          context: "vessels.self",
-          subscribe: [{ path: "notifications.*", period: 1000, policy: "instant" }],
-        }),
-      )
+      ws.send(JSON.stringify({
+        context: "vessels.self",
+        subscribe: [{ path: "notifications.*", period: 1000, policy: "instant" }],
+      }))
     }
     ws.onmessage = (evt) => {
       try {
@@ -253,11 +290,10 @@ const AlarmView: React.FC = () => {
         if (!msg.updates) return
         let changed = false
         for (const update of msg.updates)
-          for (const val of update.values || []) if (val.path.startsWith("notifications.")) changed = true
+          for (const val of update.values || [])
+            if (val.path.startsWith("notifications.")) changed = true
         if (changed) pollNotifs()
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     }
     ws.onerror = () => setConnected(false)
     ws.onclose = () => {
@@ -273,10 +309,7 @@ const AlarmView: React.FC = () => {
     return () => {
       clearInterval(interval)
       if (reconnectRef.current) clearTimeout(reconnectRef.current)
-      if (wsRef.current) {
-        wsRef.current.onclose = null
-        wsRef.current.close()
-      }
+      if (wsRef.current) { wsRef.current.onclose = null; wsRef.current.close() }
     }
   }, [connectWs, pollNotifs])
 
@@ -285,6 +318,8 @@ const AlarmView: React.FC = () => {
       const key = `${notif.path}-${action}`
       setPending((p) => ({ ...p, [key]: true }))
       await skAction(notif.id, action)
+      // Brief pause so Node-RED's global state settles before we re-poll
+      await new Promise((r) => setTimeout(r, 300))
       await pollNotifs()
       setPending((p) => ({ ...p, [key]: false }))
     },
@@ -332,72 +367,68 @@ const AlarmView: React.FC = () => {
                 const silKey = `${notif.path}-silence`
                 const ackKey = `${notif.path}-acknowledge`
                 const clrKey = `${notif.path}-clear`
-                const canSilence = notif.status?.canSilence ?? false
-                const canAcknowledge = notif.status?.canAcknowledge ?? false
-                const canClear = notif.status?.canClear ?? false
+                const canSilence = notif.status?.canSilence ?? true
+                const canAcknowledge = notif.status?.canAcknowledge ?? true
+                const canClear = notif.status?.canClear ?? true
                 const isSilenced = notif.status?.silenced ?? false
                 const isAcknowledged = notif.status?.acknowledged ?? false
+                const silencedUntil = (notif.status as any)?.silencedUntil ?? null
                 return (
                   <div
                     key={notif.path}
-                    className={`av-card ${isPulse && !isAcknowledged ? "av-pulse" : ""}`}
+                    className={`av-card ${isPulse && !isAcknowledged && !isSilenced ? "av-pulse" : ""}`}
                     style={{ background: sc.bg, border: `1px solid ${sc.border}`, boxShadow: sc.glow }}
                   >
                     <div className="av-card-header">
-                      <span
-                        className="av-state-pill"
-                        style={{ color: sc.text, borderColor: sc.border, background: `${sc.bg}cc` }}
-                      >
+                      <span className="av-state-pill" style={{ color: sc.text, borderColor: sc.border, background: `${sc.bg}cc` }}>
                         {notif.state.toUpperCase()}
                       </span>
                       <div className="av-card-body">
                         <div className="av-path">{formatPath(notif.path)}</div>
-                        <div className="av-message" style={{ color: sc.text }}>
-                          {notif.message || "—"}
-                        </div>
+                        <div className="av-message" style={{ color: sc.text }}>{notif.message || "—"}</div>
                         <div className="av-meta">
-                          {isSilenced && <span className="av-tag silenced">SILENCED</span>}
+                          {isSilenced && (
+                            <span className="av-tag silenced">
+                              {silencedUntil ? formatExpiry(silencedUntil) : "SILENCED"}
+                            </span>
+                          )}
                           {isAcknowledged && <span className="av-tag acknowledged">ACKNOWLEDGED</span>}
                           {notif.method.map((m) => (
-                            <span key={m} className="av-tag method">
-                              {m}
-                            </span>
+                            <span key={m} className="av-tag method">{m}</span>
                           ))}
                           {notif.timestamp && <span className="av-ts">{formatTs(notif.timestamp)}</span>}
                         </div>
                       </div>
                     </div>
-                    {(canSilence || canAcknowledge || canClear) && (
-                      <div className="av-actions">
-                        {canSilence && !isSilenced && (
-                          <button
-                            className={`av-btn silence ${pending[silKey] ? "pending" : ""}`}
-                            disabled={!!pending[silKey]}
-                            onClick={() => doAction(notif, "silence")}
-                          >
-                            {pending[silKey] ? "…" : "🔇 Silence"}
-                          </button>
-                        )}
-                        {canAcknowledge && !isAcknowledged && (
-                          <button
-                            className={`av-btn acknowledge ${pending[ackKey] ? "pending" : ""}`}
-                            disabled={!!pending[ackKey]}
-                            onClick={() => doAction(notif, "acknowledge")}
-                          >
-                            {pending[ackKey] ? "…" : "✓ Acknowledge"}
-                          </button>
-                        )}
-                        {canClear && (
-                          <button
-                            className={`av-btn clear ${pending[clrKey] ? "pending" : ""}`}
-                            disabled={!!pending[clrKey]}
-                            onClick={() => doAction(notif, "clear")}
-                          >
-                            {pending[clrKey] ? "…" : "✕ Clear"}
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    <div className="av-actions">
+                      {canSilence && !isSilenced && !isAcknowledged && (
+                        <button
+                          className={`av-btn silence ${pending[silKey] ? "pending" : ""}`}
+                          disabled={!!pending[silKey]}
+                          onClick={() => doAction(notif, "silence")}
+                        >
+                          {pending[silKey] ? "…" : "🔇 Silence 30m"}
+                        </button>
+                      )}
+                      {canAcknowledge && !isAcknowledged && (
+                        <button
+                          className={`av-btn acknowledge ${pending[ackKey] ? "pending" : ""}`}
+                          disabled={!!pending[ackKey]}
+                          onClick={() => doAction(notif, "acknowledge")}
+                        >
+                          {pending[ackKey] ? "…" : "✓ Acknowledge"}
+                        </button>
+                      )}
+                      {canClear && !isAcknowledged && (
+                        <button
+                          className={`av-btn clear ${pending[clrKey] ? "pending" : ""}`}
+                          disabled={!!pending[clrKey]}
+                          onClick={() => doAction(notif, "clear")}
+                        >
+                          {pending[clrKey] ? "…" : "✕ Clear"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )
               })}

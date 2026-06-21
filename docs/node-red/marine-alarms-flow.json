@@ -1,0 +1,736 @@
+[
+    {
+        "id": "487e7fdff6aeea0c",
+        "type": "tab",
+        "label": "Marine Alarms",
+        "disabled": false,
+        "locked": true,
+        "info": "Cleaned + validated Marine Alarm architecture"
+    },
+    {
+        "id": "9a869074e7d5744e",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Parse Notification",
+        "func": "const path = msg.payload?.path || '';\nconst value = msg.payload?.value || {};\n\nconst pathParts = path.split('.');\nconst pathId = pathParts.slice(1).join('.');\n\nmsg.alarm_id = value.id || pathId || 'unknown';\nmsg.alarm_state = value.state || 'normal';\nmsg.alarm_zone = (value.zone || 'all').toLowerCase();\nmsg.alarm_message = value.message || 'Marine alarm';\nmsg.alarm_silenced = value.status?.silenced || false;\nmsg.alarm_acknowledged = value.status?.acknowledged || false;\n\nmsg.payload = msg.alarm_message;\nmsg.topic = msg.alarm_id;\n\nmsg.volume = {\n    emergency: 100,\n    alarm: 85,\n    warn: 70,\n    normal: 0\n}[msg.alarm_state] ?? 70;\n\nlet alarms = global.get('activeAlarms') || {};\n\nif (msg.alarm_state === 'normal') {\n    delete alarms[msg.alarm_id];\n} else {\n    const existing = alarms[msg.alarm_id] || {};\n    alarms[msg.alarm_id] = {\n        id: msg.alarm_id,\n        path: path,\n        state: msg.alarm_state,\n        zone: msg.alarm_zone,\n        message: msg.alarm_message,\n        // Preserve a manual silence/ack set via /alarm-action -- Signal K's\n        // own write path is auth-blocked, so it will never report these as\n        // true on its own; only \"Expire Silence\" is allowed to flip\n        // silenced back to false.\n        silenced: existing.silenced || msg.alarm_silenced,\n        acknowledged: existing.acknowledged || msg.alarm_acknowledged,\n        silencedUntil: existing.silencedUntil,\n        updated: Date.now()\n    };\n}\n\nglobal.set('activeAlarms', alarms);\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 390,
+        "y": 160,
+        "wires": [
+            [
+                "1de2b68bfdb13bfa"
+            ]
+        ]
+    },
+    {
+        "id": "cb886f5692170d07",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Hysteresis gate",
+        "func": "const REARM_MS = {\n    emergency:  60 * 1000,\n    alarm:       5 * 60 * 1000,\n    warn:       15 * 60 * 1000,\n    normal:     0\n};\n\nconst id    = msg.alarm_id;\nconst state = msg.alarm_state;\nconst now   = Date.now();\n\nlet alarms = global.get('activeAlarms') || {};\n\nif (state === 'normal') {\n    if (alarms[id]) {\n        alarms[id].lastCleared = now;\n        global.set('activeAlarms', alarms);\n    }\n    return msg;\n}\n\nconst alarm       = alarms[id] || {};\nconst lastCleared = alarm.lastCleared || 0;\nconst window      = REARM_MS[state] ?? REARM_MS.warn;\nconst elapsed     = now - lastCleared;\n\nif (elapsed < window) {\n    const remaining = Math.round((window - elapsed) / 1000);\n    node.warn(`[HYSTERESIS] ${id} suppressed (${state}) - re-arm in ${remaining}s`);\n    node.status({ fill: 'yellow', shape: 'ring', text: `${id} suppressed ${remaining}s` });\n    return null;\n}\n\nalarm.lastAnnounced = now;\nalarms[id] = alarm;\nglobal.set('activeAlarms', alarms);\n\nnode.status({ fill: 'green', shape: 'dot', text: `${id} passed` });\nreturn msg;\n",
+        "outputs": 1,
+        "x": 800,
+        "y": 160,
+        "wires": [
+            [
+                "f670cd0c8ced2889"
+            ]
+        ]
+    },
+    {
+        "id": "f670cd0c8ced2889",
+        "type": "switch",
+        "z": "487e7fdff6aeea0c",
+        "name": "Route by state",
+        "property": "alarm_state",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "emergency",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "alarm",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "warn",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "normal",
+                "vt": "str"
+            }
+        ],
+        "checkall": "false",
+        "outputs": 4,
+        "x": 980,
+        "y": 160,
+        "wires": [
+            [
+                "03cd404fab8a6dcd"
+            ],
+            [
+                "d4c1c0196893db7f"
+            ],
+            [
+                "f7fd58569b82f3f5"
+            ],
+            [
+                "127d194077bc1174"
+            ]
+        ]
+    },
+    {
+        "id": "03cd404fab8a6dcd",
+        "type": "trigger",
+        "z": "487e7fdff6aeea0c",
+        "name": "Emergency repeat 30s",
+        "op1": "",
+        "op2": "",
+        "op1type": "pay",
+        "op2type": "pay",
+        "duration": "30",
+        "extend": false,
+        "units": "s",
+        "reset": "STOP",
+        "bytopic": "topic",
+        "outputs": 1,
+        "x": 1280,
+        "y": 80,
+        "wires": [
+            [
+                "f7fd58569b82f3f5"
+            ]
+        ]
+    },
+    {
+        "id": "d4c1c0196893db7f",
+        "type": "trigger",
+        "z": "487e7fdff6aeea0c",
+        "name": "Alarm repeat 120s",
+        "op1": "",
+        "op2": "",
+        "op1type": "pay",
+        "op2type": "pay",
+        "duration": "120",
+        "extend": false,
+        "units": "s",
+        "reset": "STOP",
+        "bytopic": "topic",
+        "outputs": 1,
+        "x": 1270,
+        "y": 140,
+        "wires": [
+            [
+                "f7fd58569b82f3f5"
+            ]
+        ]
+    },
+    {
+        "id": "f7fd58569b82f3f5",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Skip silenced alarms",
+        "func": "const alarmId = msg.alarm_id;\nconst alarms = global.get('activeAlarms') || {};\nconst alarm = alarms[alarmId];\n\nif (!alarm) return null;\nif (alarm.silenced || alarm.acknowledged) return null;\n\nreturn msg;\n",
+        "outputs": 1,
+        "x": 1540,
+        "y": 160,
+        "wires": [
+            [
+                "493a31bd447f8353"
+            ]
+        ]
+    },
+    {
+        "id": "493a31bd447f8353",
+        "type": "switch",
+        "z": "487e7fdff6aeea0c",
+        "name": "Route by zone",
+        "property": "alarm_zone",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "salon",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "master",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "all",
+                "vt": "str"
+            },
+            {
+                "t": "eq",
+                "v": "telegram",
+                "vt": "str"
+            }
+        ],
+        "repair": false,
+        "outputs": 4,
+        "x": 1750,
+        "y": 160,
+        "wires": [
+            [
+                "30d53c39e39c81f9"
+            ],
+            [
+                "c16e744bbcb390fd"
+            ],
+            [
+                "30d53c39e39c81f9",
+                "c16e744bbcb390fd",
+                "b92160fbde00149a"
+            ],
+            [
+                "b92160fbde00149a"
+            ]
+        ]
+    },
+    {
+        "id": "30d53c39e39c81f9",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Prep Salon TTS",
+        "func": "msg.message = msg.alarm_message;\nreturn msg;\n",
+        "outputs": 1,
+        "x": 1940,
+        "y": 80,
+        "wires": [
+            [
+                "3d501e5e54b3f042"
+            ]
+        ]
+    },
+    {
+        "id": "c16e744bbcb390fd",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Prep Master TTS",
+        "func": "msg.message = msg.alarm_message;\nreturn msg;\n",
+        "outputs": 1,
+        "x": 1940,
+        "y": 140,
+        "wires": [
+            [
+                "2ba35f52d041e979"
+            ]
+        ]
+    },
+    {
+        "id": "471fad4251c95b73",
+        "type": "debug",
+        "z": "487e7fdff6aeea0c",
+        "name": "TTS Output",
+        "active": false,
+        "tosidebar": true,
+        "complete": "true",
+        "x": 2380,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "127d194077bc1174",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Cancel repeat",
+        "func": "msg.payload = 'STOP';\nreturn msg;\n",
+        "outputs": 1,
+        "x": 1260,
+        "y": 220,
+        "wires": [
+            [
+                "03cd404fab8a6dcd",
+                "d4c1c0196893db7f"
+            ]
+        ]
+    },
+    {
+        "id": "b92160fbde00149a",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Format Telegram Message",
+        "func": "// Drop normal/clear states - no Telegram alert needed for clears\nif (msg.alarm_state === 'normal') return null;\n\nconst icons = {\n    emergency: '🚨',\n    alarm: '⛔',\n    warn: '⚠️'\n};\n\nconst icon = icons[msg.alarm_state] || 'ℹ️';\n\nmsg.payload = {\n    chatId: '5403980401',\n    type: 'message',\n    content:\n`${icon} MARINE ALERT\\n\\n` +\n`State: ${msg.alarm_state}\\n` +\n`Zone: ${msg.alarm_zone}\\n` +\n`Alarm: ${msg.alarm_id}\\n\\n` +\n`${msg.alarm_message}`\n};\n\nreturn msg;\n",
+        "outputs": 1,
+        "x": 2100,
+        "y": 200,
+        "wires": [
+            [
+                "d79771f048f8cb2c"
+            ]
+        ]
+    },
+    {
+        "id": "d79771f048f8cb2c",
+        "type": "delay",
+        "z": "487e7fdff6aeea0c",
+        "name": "Rate limit 1/5min",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "5",
+        "rateUnits": "minute",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 2090,
+        "y": 320,
+        "wires": [
+            [
+                "4b8c957e1b511c50"
+            ]
+        ]
+    },
+    {
+        "id": "b30635a32bb107fb",
+        "type": "debug",
+        "z": "487e7fdff6aeea0c",
+        "name": "Telegram OK",
+        "active": false,
+        "complete": "true",
+        "x": 2520,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "171266e556142176",
+        "type": "debug",
+        "z": "487e7fdff6aeea0c",
+        "name": "Telegram ERROR",
+        "active": false,
+        "complete": "true",
+        "x": 2540,
+        "y": 340,
+        "wires": []
+    },
+    {
+        "id": "00ad530d71ab5656",
+        "type": "inject",
+        "z": "487e7fdff6aeea0c",
+        "name": "TEST alarm",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "payload": "{\"state\":\"alarm\",\"message\":\"Engine room high temperature\",\"zone\":\"all\",\"id\":\"engine-room-temp\",\"status\":{\"silenced\":false,\"acknowledged\":false}}",
+        "payloadType": "json",
+        "x": 110,
+        "y": 220,
+        "wires": [
+            [
+                "17519f96c29e3bea"
+            ]
+        ]
+    },
+    {
+        "id": "e2622c79e7e11118",
+        "type": "inject",
+        "z": "487e7fdff6aeea0c",
+        "name": "TEST clear",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": false,
+        "onceDelay": "",
+        "topic": "",
+        "payload": "{\"state\":\"normal\",\"message\":\"Engine room normal\",\"zone\":\"all\",\"id\":\"engine-room-temp\",\"status\":{\"silenced\":false,\"acknowledged\":false}}",
+        "payloadType": "json",
+        "x": 100,
+        "y": 260,
+        "wires": [
+            [
+                "17519f96c29e3bea"
+            ]
+        ]
+    },
+    {
+        "id": "17519f96c29e3bea",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Create fake SK msg",
+        "func": "msg.payload = {\n  context: \"vessels.self\",\n  updates: [\n    {\n      source: {\n        label: \"nodered-test\"\n      },\n      timestamp: new Date().toISOString(),\n      values: [\n        {\n          path: \"notifications.engine.room\",\n          value: msg.payload\n        }\n      ]\n    }\n  ]\n};\n\nnode.warn(\"Sending delta: \" + JSON.stringify(msg.payload));\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 380,
+        "y": 240,
+        "wires": [
+            [
+                "9a869074e7d5744e",
+                "90670018d1139a0e",
+                "f9374ab6c01c6bdd"
+            ]
+        ]
+    },
+    {
+        "id": "3ce0fb5525455d94",
+        "type": "debug",
+        "z": "487e7fdff6aeea0c",
+        "name": "debug 21",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 360,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "7371ac508c8162fa",
+        "type": "comment",
+        "z": "487e7fdff6aeea0c",
+        "name": "Marine Alarm",
+        "info": "",
+        "x": 90,
+        "y": 120,
+        "wires": []
+    },
+    {
+        "id": "1de2b68bfdb13bfa",
+        "type": "rbe",
+        "z": "487e7fdff6aeea0c",
+        "name": "Block duplicate state",
+        "func": "rbe",
+        "gap": "",
+        "start": "",
+        "inout": "out",
+        "septopics": true,
+        "property": "alarm_state",
+        "topi": "topic",
+        "x": 600,
+        "y": 120,
+        "wires": [
+            [
+                "cb886f5692170d07"
+            ]
+        ]
+    },
+    {
+        "id": "n_comment_actions",
+        "type": "comment",
+        "z": "487e7fdff6aeea0c",
+        "name": "Alarm Actions (Silence / Acknowledge / Clear) -- called from AlarmView",
+        "info": "",
+        "x": 230,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "n_http_in_action",
+        "type": "http in",
+        "z": "487e7fdff6aeea0c",
+        "name": "POST /alarm-action",
+        "url": "/alarm-action",
+        "method": "post",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 160,
+        "y": 470,
+        "wires": [
+            [
+                "n_fn_apply_action"
+            ]
+        ]
+    },
+    {
+        "id": "n_http_in_status",
+        "type": "http in",
+        "z": "487e7fdff6aeea0c",
+        "name": "GET /alarm-status",
+        "url": "/alarm-status",
+        "method": "get",
+        "upload": false,
+        "swaggerDoc": "",
+        "x": 150,
+        "y": 620,
+        "wires": [
+            [
+                "n_fn_build_status"
+            ]
+        ]
+    },
+    {
+        "id": "n_fn_apply_action",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Apply Alarm Action",
+        "func": "const body = typeof msg.payload === 'string' ? JSON.parse(msg.payload || '{}') : (msg.payload || {});\nconst incomingId = body.id || '';\nlet action = body.action || '';\nif (action === 'clear') action = 'acknowledge';\n\nfunction respond(code, payload) {\n    return [null, { ...msg, statusCode: code, payload: payload, headers: { 'Access-Control-Allow-Origin': '*' } }, null];\n}\n\nif (!incomingId || !['silence', 'acknowledge'].includes(action)) {\n    return respond(400, { ok: false, error: 'invalid id or action' });\n}\n\nlet alarms = global.get('activeAlarms') || {};\nconst key = Object.keys(alarms).find((k) => k === incomingId || alarms[k].path === incomingId);\n\nif (!key) {\n    return respond(404, { ok: false, error: 'alarm not currently active' });\n}\n\nconst alarm = alarms[key];\n\nif (action === 'silence') {\n    alarm.silenced = true;\n    alarm.silencedUntil = Date.now() + 30 * 60 * 1000;\n} else {\n    alarm.acknowledged = true;\n}\nalarms[key] = alarm;\nglobal.set('activeAlarms', alarms);\n\nconst stopMsg = { topic: key, payload: 'STOP' };\nconst expireMsg = action === 'silence' ? { topic: key, alarm_key: key } : null;\nconst responseMsg = {\n    ...msg,\n    statusCode: 200,\n    headers: { 'Access-Control-Allow-Origin': '*' },\n    payload: { ok: true, id: key, silenced: !!alarm.silenced, acknowledged: !!alarm.acknowledged }\n};\n\nreturn [stopMsg, responseMsg, expireMsg];",
+        "outputs": 3,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 470,
+        "wires": [
+            [
+                "03cd404fab8a6dcd",
+                "d4c1c0196893db7f"
+            ],
+            [
+                "n_http_resp_action"
+            ],
+            [
+                "n_delay_expire"
+            ]
+        ]
+    },
+    {
+        "id": "n_delay_expire",
+        "type": "delay",
+        "z": "487e7fdff6aeea0c",
+        "name": "Silence expiry 30 min",
+        "pauseType": "delay",
+        "timeout": "30",
+        "timeoutUnits": "minutes",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 760,
+        "y": 500,
+        "wires": [
+            [
+                "n_fn_expire"
+            ]
+        ]
+    },
+    {
+        "id": "n_fn_expire",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Expire Silence",
+        "func": "const key = msg.alarm_key;\nlet alarms = global.get('activeAlarms') || {};\nconst alarm = alarms[key];\n\nif (!alarm || !alarm.silenced) return null;\n\nalarm.silenced = false;\ndelete alarm.silencedUntil;\nalarms[key] = alarm;\nglobal.set('activeAlarms', alarms);\n\nif (alarm.acknowledged || alarm.state === 'normal') return null;\n\n// Still actively abnormal after 30 min -- resume alerting by re-entering\n// the pipeline at the hysteresis gate, bypassing the rbe dedup filter\n// (which would otherwise block a same-state repeat).\nmsg.alarm_id = key;\nmsg.alarm_state = alarm.state;\nmsg.alarm_zone = alarm.zone;\nmsg.alarm_message = alarm.message;\nmsg.topic = key;\nreturn msg;\n",
+        "outputs": 1,
+        "x": 1010,
+        "y": 500,
+        "wires": [
+            [
+                "cb886f5692170d07"
+            ]
+        ]
+    },
+    {
+        "id": "n_fn_build_status",
+        "type": "function",
+        "z": "487e7fdff6aeea0c",
+        "name": "Build Alarm Status",
+        "func": "const alarms = global.get('activeAlarms') || {};\nconst out = Object.keys(alarms).map((key) => {\n    const a = alarms[key];\n    return {\n        id: key,\n        path: a.path || null,\n        state: a.state,\n        silenced: !!a.silenced,\n        acknowledged: !!a.acknowledged,\n        silencedUntil: a.silencedUntil || null\n    };\n});\n\nmsg.statusCode = 200;\nmsg.headers = { 'Access-Control-Allow-Origin': '*' };\nmsg.payload = out;\nreturn msg;\n",
+        "outputs": 1,
+        "x": 350,
+        "y": 620,
+        "wires": [
+            [
+                "n_http_resp_status"
+            ]
+        ]
+    },
+    {
+        "id": "n_http_resp_action",
+        "type": "http response",
+        "z": "487e7fdff6aeea0c",
+        "name": "Action response",
+        "statusCode": "",
+        "headers": {},
+        "x": 900,
+        "y": 470,
+        "wires": []
+    },
+    {
+        "id": "n_http_resp_status",
+        "type": "http response",
+        "z": "487e7fdff6aeea0c",
+        "name": "Status response",
+        "statusCode": "",
+        "headers": {},
+        "x": 580,
+        "y": 620,
+        "wires": []
+    },
+    {
+        "id": "4b8c957e1b511c50",
+        "type": "telegram sender",
+        "z": "487e7fdff6aeea0c",
+        "name": "DOTS",
+        "bot": "690ace1937f59100",
+        "haserroroutput": true,
+        "outputs": 2,
+        "x": 2290,
+        "y": 320,
+        "wires": [
+            [
+                "b30635a32bb107fb"
+            ],
+            [
+                "171266e556142176"
+            ]
+        ]
+    },
+    {
+        "id": "3d501e5e54b3f042",
+        "type": "cast-to-client",
+        "z": "487e7fdff6aeea0c",
+        "name": "Salon Speaker",
+        "url": "",
+        "contentType": "",
+        "message": "",
+        "language": "en",
+        "ip": "192.168.2.204",
+        "port": "",
+        "volume": "",
+        "x": 2140,
+        "y": 80,
+        "wires": [
+            [
+                "471fad4251c95b73"
+            ]
+        ]
+    },
+    {
+        "id": "2ba35f52d041e979",
+        "type": "cast-to-client",
+        "z": "487e7fdff6aeea0c",
+        "name": "Master Speaker",
+        "url": "",
+        "contentType": "",
+        "message": "",
+        "language": "en",
+        "ip": "192.168.2.146",
+        "port": "",
+        "volume": "",
+        "x": 2140,
+        "y": 140,
+        "wires": [
+            [
+                "471fad4251c95b73"
+            ]
+        ]
+    },
+    {
+        "id": "90670018d1139a0e",
+        "type": "debug",
+        "z": "487e7fdff6aeea0c",
+        "name": "debug 1",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "false",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 580,
+        "y": 280,
+        "wires": []
+    },
+    {
+        "id": "ac7a982605fd8122",
+        "type": "signalk-notification",
+        "z": "487e7fdff6aeea0c",
+        "name": "",
+        "notification": "notifications.*",
+        "state": "any",
+        "server": "0a67d77c41ef16b3",
+        "x": 110,
+        "y": 160,
+        "wires": [
+            [
+                "9a869074e7d5744e",
+                "3ce0fb5525455d94"
+            ]
+        ]
+    },
+    {
+        "id": "f9374ab6c01c6bdd",
+        "type": "signalk-send-delta",
+        "z": "487e7fdff6aeea0c",
+        "name": "",
+        "server": "0a67d77c41ef16b3",
+        "x": 610,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "690ace1937f59100",
+        "type": "telegram bot",
+        "botname": "@DOTS1234bot",
+        "usernames": "",
+        "chatids": "",
+        "baseapiurl": "",
+        "testenvironment": false,
+        "updatemode": "polling",
+        "pollinterval": 300,
+        "usesocks": false,
+        "sockshost": "",
+        "socksprotocol": "socks5",
+        "socksport": 6667,
+        "socksusername": "anonymous",
+        "sockspassword": "",
+        "bothost": "",
+        "botpath": "",
+        "localbothost": "0.0.0.0",
+        "localbotport": 8443,
+        "publicbotport": 8443,
+        "privatekey": "",
+        "certificate": "",
+        "useselfsignedcertificate": false,
+        "sslterminated": false,
+        "verboselogging": false
+    },
+    {
+        "id": "0a67d77c41ef16b3",
+        "type": "signalk-client",
+        "hostname": "localhost",
+        "port": 3000,
+        "useTLS": false
+    },
+    {
+        "id": "6faad7f1df19ce58",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "node-red-contrib-telegrambot": "17.4.16",
+            "node-red-contrib-cast": "0.2.17",
+            "@signalk/node-red-contrib-signalk": "1.2.0"
+        }
+    }
+]
